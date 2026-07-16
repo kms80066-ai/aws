@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lotteria - Burger Brand Space</title>
+    <style>
+        :root {
+            --ios-bg: #f2f2f7;
+            --ios-card: #ffffff;
+            --ios-text: #1c1c1e;
+            --ios-sub: #8e8e93;
+            --ios-red: #ff3b30;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--ios-bg);
+            color: var(--ios-text);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--ios-card);
+            border-radius: 24px;
+            padding: 36px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--ios-red);
+            margin: 0 0 8px 0;
+            letter-spacing: -0.5px;
+        }
+
+        .tagline {
+            font-size: 16px;
+            color: var(--ios-sub);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        /* 💡 이미지 컨테이너 및 둥글기 */
+        .menu-image-container {
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 24px;
+            background: #fafafa;
+            border: 1px solid #e5e5ea;
+        }
+
+        .menu-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        hr {
+            border: none;
+            border-top: 0.5px solid #e5e5ea;
+            margin: 20px 0;
+        }
+
+        h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+        }
+
+        p {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #3a3a3c;
+            margin: 0 0 16px 0;
+        }
+
+        .back-btn {
+            display: inline-block;
+            margin-top: 24px;
+            padding: 14px 28px;
+            background-color: var(--ios-red);
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            border-radius: 14px;
+            transition: transform 0.2s, opacity 0.2s;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .back-btn:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🍔 롯데리아 (Lotteria)</h1>
+        <div class="tagline">"K-버거의 독창적인 크리에이터"</div>
+        
+        <!-- 💡 고화질 대표 메뉴 이미지 추가 -->
+        <div class="menu-image-container">
+            <img src="https://lotteriausa.com/wp-content/uploads/2025/07/img-prod-burger-1.png" class="menu-image" alt="Lotteria Bulgogi Burger">
+        </div>
+
+        <hr>
+
+        <h3>💡 한국인 입맛에 가장 특화된 메뉴</h3>
+        <p>1979년 한국 최초로 패스트푸드 시장을 개척했습니다. 대표 시그니처인 '불고기버거'는 불고기 소스를 서양식 햄버거에 조화롭게 입혀 대중적인 맛을 정의했습니다.</p>
+        
+        <h3>🧪 끝없는 실험 정신</h3>
+        <p>번 대신 쌀을 사용한 '라이스버거', 치즈가 가득 늘어나는 '모짜렐라 인 더 버거' 등 기존의 틀을 깨는 이색적인 시도를 지속적으로 선도하고 있습니다.</p>
+
+        <!-- 💡 메인 주소 buggermain.html로 복귀 -->
+        <a href="buggermain.html" class="back-btn">메인 대시보드로 돌아가기</a>
+    </div>
+
+</body>
+</html>
