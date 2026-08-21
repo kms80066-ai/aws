@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS EC2 Server Dashboard</title>
+    <meta name="description" content="AWS EC2 및 Apache httpd를 위한 Apple 스타일의 미니멀하고 정교한 정적 데모 대시보드입니다.">
+    <!-- Google Fonts (SF Pro 느낌의 Inter 및 Outfit 로드) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=SF+Pro+Display&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-brands fa-apple"></i>
+                </div>
+                <div class="brand-text">
+                    <h2>Server Portal</h2>
+                    <span>EC2 Monitor</span>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" id="btn-nav-dashboard">
+                    <i class="fa-solid fa-chart-pie"></i> Dashboard
+                </a>
+                <a href="#" class="nav-item" id="btn-nav-metadata">
+                    <i class="fa-solid fa-info-circle"></i> EC2 Metadata
+                </a>
+                <a href="#" class="nav-item" id="btn-nav-logs">
+                    <i class="fa-solid fa-list-ul"></i> HTTPD Logs
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator-container">
+                    <span class="status-dot green" id="main-status-dot"></span>
+                    <span class="status-text" id="main-status-text">Server Online</span>
+                </div>
+                <button id="theme-toggle" class="theme-btn">
+                    <i class="fa-solid fa-moon"></i> <span>Dark Mode</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar Header -->
+            <header class="topbar">
+                <div class="page-title">
+                    <h1>Web Service Monitor</h1>
+                    <p>Live health and system telemetry dashboard for Apache HTTP Server on EC2</p>
+                </div>
+                <div class="action-bar">
+                    <button id="btn-refresh" class="btn btn-secondary">
+                        <i class="fa-solid fa-arrow-rotate-right"></i> Refresh
+                    </button>
+                    <div class="instance-badge">
+                        <span class="label">Instance</span>
+                        <span class="value" id="badge-instance-id">i-0a12b3c4d5e6f7g8h</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Quick Stats Section (Apple Health / Stocks Card Layout) -->
+            <section class="quick-stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">CPU Usage</span>
+                        <span class="stat-icon cpu-color"><i class="fa-solid fa-microchip"></i></span>
+                    </div>
+                    <h3 class="stat-value" id="txt-cpu-usage">--%</h3>
+                    <span class="stat-trend" id="trend-cpu"><i class="fa-solid fa-chevron-up"></i> Normal</span>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Memory Free</span>
+                        <span class="stat-icon ram-color"><i class="fa-solid fa-memory"></i></span>
+                    </div>
+                    <h3 class="stat-value" id="txt-mem-usage">-- / 8.0 GB</h3>
+                    <span class="stat-trend" id="trend-mem"><i class="fa-solid fa-check"></i> Healthy</span>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Network Traffic</span>
+                        <span class="stat-icon traffic-color"><i class="fa-solid fa-arrow-down-up-across-line"></i></span>
+                    </div>
+                    <h3 class="stat-value" id="txt-network-traffic">0.0 Kbps</h3>
+                    <span class="stat-trend" id="trend-net"><i class="fa-solid fa-circle"></i> Active</span>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">httpd Uptime</span>
+                        <span class="stat-icon uptime-color"><i class="fa-solid fa-clock"></i></span>
+                    </div>
+                    <h3 class="stat-value" id="txt-uptime">--d --h --m</h3>
+                    <span class="stat-trend text-success" id="trend-uptime"><i class="fa-solid fa-circle-play"></i> Running</span>
+                </div>
+            </section>
+
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="content-view active">
+                <div class="dashboard-grid">
+                    <!-- Left Column: Primary Monitoring & Controls -->
+                    <div class="dashboard-col col-main">
+                        <!-- Chart Card -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Resource Telemetry</h3>
+                                <span class="badge" id="telemetry-badge">Live</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="telemetryChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Apache Service Control -->
+                        <div class="card control-card">
+                            <div class="card-header">
+                                <h3>Apache Service Control</h3>
+                                <span class="badge status-active" id="httpd-status-badge">Running</span>
+                            </div>
+                            <div class="card-body control-layout">
+                                <div class="control-desc">
+                                    <p>EC2 인스턴스의 httpd systemd 서비스 상태를 관리합니다. 서비스 정지/재시작을 모사하는 데모 기능이 포함되어 있습니다.</p>
+                                    <div class="control-details">
+                                        <span>PID: <strong id="txt-httpd-pid">10245</strong></span>
+                                        <span>Ports: <strong class="badge-port">80</strong> <strong class="badge-port">443</strong></span>
+                                    </div>
+                                </div>
+                                <div class="control-actions">
+                                    <button class="btn btn-danger" id="btn-service-stop">Stop</button>
+                                    <button class="btn btn-success" id="btn-service-start" disabled>Start</button>
+                                    <button class="btn btn-warning" id="btn-service-restart">Restart</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Logs and Distribution -->
+                    <div class="dashboard-col col-side">
+                        <!-- Log Terminal (Apple Terminal style, elegant dark/light gray) -->
+                        <div class="card terminal-card">
+                            <div class="card-header">
+                                <h3>Live Console Logs</h3>
+                                <button class="btn-clear-logs" id="btn-clear-logs" title="Clear logs"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                            <div class="card-body terminal-body">
+                                <div class="terminal-content" id="log-terminal">
+                                    <!-- Filled by JS -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Response Code Stat Card -->
+                        <div class="card pie-card">
+                            <div class="card-header">
+                                <h3>Response Distribution</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container pie-container">
+                                    <canvas id="responseChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metadata View -->
+            <div id="view-metadata" class="content-view">
+                <div class="card metadata-card">
+                    <div class="card-header">
+                        <h3>AWS EC2 Instance Metadata</h3>
+                        <p class="subtitle">IMDSv2를 통해 로드한 인스턴스의 정교한 메타데이터 상세 내역입니다.</p>
+                    </div>
+                    <div class="card-body">
+                        <table class="metadata-table">
+                            <thead>
+                                <tr>
+                                    <th>Metadata Path / Key</th>
+                                    <th>Value</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>/ami-id</code></td>
+                                    <td><span class="copyable">ami-0c55b159cbfafe1f0</span></td>
+                                    <td>Amazon Machine Image (AMI) ID</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/instance-id</code></td>
+                                    <td><span class="copyable" id="meta-instance-id">i-0a12b3c4d5e6f7g8h</span></td>
+                                    <td>Unique ID of this running EC2 instance</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/instance-type</code></td>
+                                    <td><span class="copyable badge-type">t3.medium</span></td>
+                                    <td>Virtual hardware configuration type</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/local-ipv4</code></td>
+                                    <td><span class="copyable">172.31.24.102</span></td>
+                                    <td>Private IPv4 address inside the VPC</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/public-ipv4</code></td>
+                                    <td><span class="copyable" id="meta-public-ip">54.180.95.23</span></td>
+                                    <td>Publicly accessible IP address</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/placement/availability-zone</code></td>
+                                    <td><span class="copyable">ap-northeast-2a</span></td>
+                                    <td>AWS Availability Zone placement</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/security-groups</code></td>
+                                    <td><span class="copyable">sg-04a5bf4e8c14ff1 (web-traffic-sg)</span></td>
+                                    <td>Applied Security Group (Firewall) rules</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/iam/info</code></td>
+                                    <td><span class="copyable">EC2-SSM-WebRole</span></td>
+                                    <td>Attached IAM role configuration</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs View -->
+            <div id="view-logs" class="content-view">
+                <div class="card full-logs-card">
+                    <div class="card-header">
+                        <h3>Apache Web Logs (/var/log/httpd/access_log)</h3>
+                        <div class="log-actions">
+                            <input type="text" id="log-search" placeholder="Search logs...">
+                            <select id="log-filter-status">
+                                <option value="all">All HTTP Codes</option>
+                                <option value="200">200 OK</option>
+                                <option value="300">3xx Redirects</option>
+                                <option value="400">4xx Client Errors</option>
+                                <option value="500">5xx Server Errors</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="full-log-viewer">
+                            <div class="log-list" id="full-log-list">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
