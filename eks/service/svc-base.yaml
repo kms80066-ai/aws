@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-frontend
+spec:
+  selector:
+    job: web            # 연결할 파드의 라벨
+  ports:                # 외부 접속 포트: 3000-32767 랜덤
+    - port: 8080        # 서비스의 포트
+      targetPort: 80    # 파드(컨테이너)의 포트
+  type: NodePort
