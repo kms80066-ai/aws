@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>McDonald's - Burger Brand Space</title>
+    <style>
+        :root {
+            --ios-bg: #f2f2f7;
+            --ios-card: #ffffff;
+            --ios-text: #1c1c1e;
+            --ios-sub: #8e8e93;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--ios-bg);
+            color: var(--ios-text);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--ios-card);
+            border-radius: 24px;
+            padding: 36px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            color: #f1c40f;
+            margin: 0 0 8px 0;
+            letter-spacing: -0.5px;
+        }
+
+        .tagline {
+            font-size: 16px;
+            color: var(--ios-sub);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        /* 💡 이미지 컨테이너 및 둥글기 */
+        .menu-image-container {
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 24px;
+            background: #fafafa;
+            border: 1px solid #e5e5ea;
+        }
+
+        .menu-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        hr {
+            border: none;
+            border-top: 0.5px solid #e5e5ea;
+            margin: 20px 0;
+        }
+
+        h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+        }
+
+        p {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #3a3a3c;
+            margin: 0 0 16px 0;
+        }
+
+        .back-btn {
+            display: inline-block;
+            margin-top: 24px;
+            padding: 14px 28px;
+            background-color: #f1c40f;
+            color: #1c1c1e;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            border-radius: 14px;
+            transition: transform 0.2s, opacity 0.2s;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .back-btn:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🍟 맥도날드 (McDonald's)</h1>
+        <div class="tagline">"글로벌 패스트푸드의 영원한 기준점"</div>
+        
+        <!-- 💡 고화질 대표 메뉴 이미지 추가 -->
+        <div class="menu-image-container">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/9/9a/Big_Mac_hamburger.jpg" class="menu-image" alt="McDonalds Big Mac">
+        </div>
+
+        <hr>
+
+        <h3>👑 버거 프랜차이즈의 교과서</h3>
+        <p>전 세계 어디를 가도 일관된 시스템과 맛을 보증합니다. 100% 쇠고기 패티 2장과 특제 소스를 아낌없이 얹은 '빅맥(Big Mac)'은 버거의 글로벌 스탠다드입니다.</p>
+        
+        <h3>🍟 독보적인 아침 생태계</h3>
+        <p>어느 경쟁사도 쉽게 넘보지 못하는 신선한 '맥모닝(McMorning)' 라인업과 갓 튀겨 바삭하고 짭조름한 프렌치프라이로 강력한 대중적 영향력을 선점하고 있습니다.</p>
+
+        <!-- 💡 메인 주소 buggermain.html로 복귀 -->
+        <a href="buggermain.html" class="back-btn">메인 대시보드로 돌아가기</a>
+    </div>
+
+</body>
+</html>
