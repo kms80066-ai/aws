@@ -1,0 +1,86 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:   # eks 자체 설정
+    name: std09-ex1-cluster
+    region: ca-central-1
+    tags:
+        # Name: "std09-ex-cluster"
+        Project: "Education"
+        Owner: "bipa17"
+# iam:
+#     withOIDC: true    # eks에 생성된 인스턴스들이 AWS 서비스를 사용할 수 있게 함.
+vpc:
+    # cidr: "10.0.0.0/16"
+    # enableDnsHostname: true
+    # enableDnsSupport: true
+    clusterEndpoints:
+        publicAccess: true
+        privateAccess: true
+    nat:
+        gateway: Single
+    # subnets:
+    #     public:
+    #         ca-central-1a:
+    #             cidr: "10.0.1.0/24"
+    #             mapPublicIpOnLaunch: true
+    #             tags:
+    #                 Name: "std09-eks-public1a-subnet"
+    #                 Project: "Education"
+    #                 Owner: "bipa17"
+    #         ca-central-1b:
+    #             cidr: "10.0.2.0/24"
+    #             mapPublicIpOnLaunch: true
+    #             tags:
+    #                 Name: "std09-eks-public1b-subnet"
+    #                 Project: "Education"
+    #                 Owner: "bipa17"
+    #         ca-central-1d:
+    #             cidr: "10.0.3.0/24"
+    #             mapPublicIpOnLaunch: true
+    #             tags:
+    #                 Name: "std09-eks-public1d-subnet"
+    #                 Project: "Education"
+    #                 Owner: "bipa17"
+    #     private:
+    #         ca-central-1a:
+    #             cidr: "10.0.11.0/24"
+    #             tags:
+    #                 Name: "std09-eks-private1a-subnet"
+    #                 Project: "Education"
+    #                 Owner: "bipa17"
+    #         ca-central-1b:
+    #             cidr: "10.0.12.0/24"
+    #             tags:
+    #                 Name: "std09-eks-private1b-subnet"
+    #                 Project: "Education"
+    #                 Owner: "bipa17"
+    #         ca-central-1d:
+    #             cidr: "10.0.13.0/24"
+    #             tags:
+    #                 Name: "std09-eks-private1d-subnet"
+    #                 Project: "Education"
+    #                 Owner: "bipa17"
+# 노드그룹 이름, 타입, 개수, 볼륨, AMI(eks 지원하는), ssh 설정, 어디(public/private) 배치할지
+# 보안그룹, 정책(IAM)
+managedNodeGroups:
+  - name: std09-ex-eks-ng
+    instanceType: t3.micro
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 3
+    volumeSize: 20
+    privateNetworking: true     # 인스턴스를 프라이빗 서브넷에만 배포
+    ssh:
+        allow: true
+        publicKeyName: "std09-keypair" # EC2 키페어 이름
+    # securityGroups:
+    #     attachIDs: [""]
+    iam:
+        withAddonPolicies:
+            imageBuilder: true  # 컨테이너 이미지 사용 권한
+            autoScaler: true    # 오토스케일그룹 사용 권한
+            albIngress: true    # 로드밸런서 사용 권한 정책
+            cloudWatch: true    # 로그 허용을 통한 모니터링 허용 정책
+
+# 생성 명령: eksctl create cluster -f [파일명.yaml]
