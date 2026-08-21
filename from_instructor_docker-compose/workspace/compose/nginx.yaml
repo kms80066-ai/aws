@@ -1,0 +1,17 @@
+services:
+  service-board-nginx:
+    image: minseung12/insnginx:v4
+    build:
+      context: /home/ga05/from_instructor_docker-compose/workspace/build/nginx
+      dockerfile: Dockerfile
+      platforms: ["linux/amd64"]
+    container_name: board-nginx-container
+    restart: always
+    ports:
+      - "80:80"
+    networks:
+      - board-network
+
+networks:
+  board-network:
+    driver: bridge

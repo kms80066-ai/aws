@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS 3-Tier 아키텍처 실습 - www.kms26.cloud</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .card { background: #eef7fc; padding: 15px; border-left: 5px solid #3498db; margin: 20px 0; border-radius: 4px; }
+        ul { line-height: 1.8; }
+        a.btn { display: inline-block; background: #3498db; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
+        a.btn:hover { background: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AWS 3-Tier 고가용성 웹 서비스 프로젝트</h1>
+        <p>본 페이지는 Route 53 (<code>www.kms26.cloud</code>) 및 Nginx 웹 서버를 통해 호스팅되고 있습니다.</p>
+        
+        <div class="card">
+            <h3>🏗️ 아키텍처 구성요소 및 실습 내용</h3>
+            <ul>
+                <li><strong>Web Tier:</strong> Nginx Auto Scaling Group (EBS 마운트: <code>/mnt/data/www</code>)</li>
+                <li><strong>WAS Tier:</strong> FastAPI (<code>api.kms26.cloud</code>, EBS 마운트: <code>/mnt/data/fastapi-app</code>)</li>
+                <li><strong>DB Tier:</strong> MySQL EC2 (EBS 10G 디스크 파티셔닝 후 <code>/mnt/data/mysql</code> 및 <code>/mnt/log/mysql</code> 세팅)</li>
+                <li><strong>Storage:</strong> S3 버킷을 통한 정적 파일(HTML, Python Script) 관리 및 동적 배포</li>
+            </ul>
+        </div>
+
+        <h3>🔗 서비스 테스트 링크</h3>
+        <p>아래 버튼을 클릭하면 FastAPI 백엔드를 거쳐 MySQL DB와의 연동 상태를 실시간으로 확인하는 페이지로 이동합니다.</p>
+        <a href="mysql.html" class="btn">MySQL DB 연결 확인 페이지로 이동 ➔</a>
+    </div>
+</body>
+</html>

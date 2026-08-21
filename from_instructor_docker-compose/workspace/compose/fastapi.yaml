@@ -1,0 +1,23 @@
+services:
+  service-fastapi:
+    image: minseung12/insfastapi:v1
+    build:
+      context: /home/ga05/from_instructor_docker-compose/workspace/build/fastapi # FastAPI Dockerfile이 있는 현재 경로
+      dockerfile: Dockerfile
+      platforms: ["linux/amd64"]
+    container_name: fastapi-container
+    restart: always
+    environment:
+      # 코드 내 DB_INFO["host"]를 'my-service-db'로 설정해야 합니다.
+      DB_HOST: "db.ins.abc"
+      DB_USER: "dev"
+      DB_PASSWORD: "dev1234!"
+      DB_NAME: "iandb"
+    ports:
+      - "8000:8000"
+    networks:
+      - board-network
+
+networks:
+  board-network:
+    driver: bridge

@@ -1,0 +1,27 @@
+#!/bin/bash
+# 1. 시스템 업데이트 및 iptables-persistent 설치
+apt update && apt upgrade -y
+apt install -y iptables-persistent
+
+# 2. IP 포워딩 활성화 (커널 레벨)
+# 패킷이 인스턴스를 통과할 수 있게 허용합니다.
+echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+# echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
+sysctl -p
+
+# 3. iptables NAT 규칙 설정
+# t3 시리즈의 기본 인터페이스 이름은 ens5입니다.
+# 프라이빗 IP를 퍼블릭 IP로 변환(Masquerade)합니다.
+iptables -t nat -A POSTROUTING -o ens5 -j MASQUERADE
+
+# 4. 설정 영구 저장
+# 우분투는 netfilter-persistent를 통해 규칙을 저장합니다.
+netfilter-persistent save
+systemctl enable netfilter-persistent
+systemctl start netfilter-persistent
+
+# 5. 상태 체크를 위한 csron 설치
+# 우분투는 기본적으로 cron이 포함되어 있으나 확실하게 설치합니다.
+apt install -y cron
+systemctl enable cron
+systemctl start cron

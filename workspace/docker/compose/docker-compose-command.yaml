@@ -1,0 +1,72 @@
+# docker compose 명령어 실습
+# up/ down / bulid / push / start / stop / restart
+# 형식 1: docker-compose up -d
+# 형식 2: docker compose -f [파일명] -f [파일명] ... up -d
+# docker compose -f docker-compose-command.yaml [up/ down / bulid / push / start / stop / restart]
+# DOWN: --rmi [all | local]
+# docker compose -f [파일명] build [--push] 다만, docker hub에 로그인 필수
+# docker compose -f 파일명 up -d --build ==> up + --build 사용가능, --push는 불가능
+# docker compose -f 파일명 build --push && docker compose -f 파일명 up -d 는 가능
+# pull_policy: [always | never | if-not-present(로컬에 이미지 없을 때만 다운로드)]
+
+services:
+  my-web:
+    image: minseung12/nginx:1.31.3-v11
+    pull_policy: if_not_present
+    build:
+      context: ../build/nginx    #Dockerfile(소스들)의 경로
+      dockerfile: Dockerfile
+    container_name: my-nginx
+    restart: unless-stopped
+    depends_on: # 같은 파일 내에 정의된 특정 앱(서비스)이 먼저 실행된 후 앱 실행
+      - my-backend  # 먼저 실행되어야할 서비스명
+    ports:
+      - "80:80"
+    networks:
+      frontend-net:
+          ipv4_address: 10.0.0.10 #IP를 정의
+      backend-net:
+    volumes:
+      - shared-data:/var/log/nginx
+# ----------------------------------------------------------------
+  my-backend:
+    image: minseung12/myfastapi:v2
+    build:
+      context: ../build/fastapi
+      dockerfile: Dockerfile
+    container_name: my-app
+    restart: unless-stopped
+    environment:
+      # 코드 내 DB_INFO["host"]를 'my-service-db'로 설정해야 합니다
+      DB_HOST: "db.std09.db"
+      DB_USER: "std09"
+      DB_PASSWORD: "qwe123"
+      DB_NAME: "testdb"
+    ports:
+      - "8000:8000"
+    networks:
+      - backend-net
+# 네트워크 생성 ===================================================
+networks:
+  frontend-net:
+    driver: bridge
+    ipam: # 네트워크 상세 설정
+      config:
+        - subnet: 10.0.0.0/24
+          ip_range: 10.0.0.0/24
+          gateway: 10.0.0.1
+  backend-net:
+    driver: bridge
+    ipam: # 네트워크 상세 설정
+      config:
+        - subnet: 10.0.1.0/24
+          ip_range: 10.0.1.0/24
+          gateway: 10.0.1.1
+# 볼륨 생성 =========================================================
+volumes:
+  shared-data:
+    driver: local # local | efs
+    driver_opts:
+      type: "none"
+      o: bind
+      device: "/home/ga05/logs/nginx"
