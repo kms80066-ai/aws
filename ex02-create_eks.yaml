@@ -1,0 +1,52 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:   # eks 자체 설정
+    name: std09-ex2-cluster
+    region: ca-central-1
+    tags:
+        # Name: "std09-ex-cluster"
+        Project: "Education"
+        Owner: "bipa17"
+iam:
+    withOIDC: true    # eks에 생성된 인스턴스들이 AWS 서비스를 사용할 수 있게 함.
+vpc:
+    id: "vpc-0e599640b22e89a0f"
+    clusterEndpoints:
+        publicAccess: true
+        privateAccess: true
+    subnets:
+        public:
+            ca-central-1a: {id: subnet-0e4e94ba6d2c7d7f8} # 기존의 VPC에 있는 서브넷을 그대로 사용
+            ca-central-1b: {id: subnet-06c09231e1e87ef4b}
+            ca-central-1d: {id: subnet-0719fd5c2c9232928}
+        private:
+            ca-central-1a: {id: subnet-0a1084b68378a36e1}
+            ca-central-1b: {id: subnet-0984309a6289f0694}
+            ca-central-1d: {id: subnet-0499df80696d3e0fb}
+
+# 노드그룹 이름, 타입, 개수, 볼륨, AMI(eks 지원하는), ssh 설정, 어디(public/private) 배치할지
+# 보안그룹, 정책(IAM)
+managedNodeGroups:
+  - name: std09-ex-eks-ng
+    instanceType: t3.micro
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 3
+    volumeSize: 20
+    privateNetworking: true     # 인스턴스를 프라이빗 서브넷에만 배포
+    ssh:
+        allow: true
+        publicKeyName: "std09-keypair" # EC2 키페어 이름
+    securityGroups:
+        attachIDs: ["sg-04feb12774209d34b"] # ssh, web 보안그룹
+    iam:
+        withAddonPolicies:
+            imageBuilder: true  # 컨테이너 이미지 사용 권한
+            autoScaler: true    # 오토스케일그룹 사용 권한
+            albIngress: true    # 로드밸런서 사용 권한 정책
+            cloudWatch: true    # 로그 허용을 통한 모니터링 허용 정책
+
+# 생성 명령: eksctl create cluster -f <파일명.yaml>
+# 에러 발생시 혹은 그냥 삭제하고싶을때
+# eksctl delete cluster -f <파일명.yaml>

@@ -1,0 +1,80 @@
+# 1. MYSQL 설치(v8.0)
+# 2. 초기화 파일을 이용하여 사용자 std09와 데이터베이스(testdb)생성
+# 3. svc를 이용하여 파드가 재생성되어도 연결할 수 있도록 구성(NodePort)
+# 4. 데이터베이스 파일은 로컬에 저장
+
+# 1. 비밀번호 시크릿
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  ROOT_PASSWORD: "cXdlcmFzZGY=" # qwerasdf (base64)
+  STD09_PASSWORD: "cXdlcmFzZGY=" # 필요 시 사용자 패스워드도 base64 지정 가능
+
+---
+# 2. 초기화 SQL 스크립트 (ConfigMap)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-config
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS testdb;
+    CREATE USER IF NOT EXISTS 'std09'@'%' IDENTIFIED BY 'qwerasdf';
+    GRANT ALL PRIVILEGES ON testdb.* TO 'std09'@'%';
+    FLUSH PRIVILEGES;
+
+---
+# 3. MySQL 파드 정의
+# 파일과 파일의 구분은 ---로 한다.
+apiVersion: v1    # kubectl api-resources에 나오는 버전 값
+kind: Pod
+metadata:
+  name: secret-mysql-pod  # 파드의 이름 정의
+  labels: 
+    app: secret-mysql
+spec:
+  containers:
+    - name: secret-mysql-container
+      image: mysql:8.0
+      ports:
+      - containerPort: 3306
+      env:
+        - name: MYSQL_ROOT_PASSWORD   # 환경변수명으로 mysql에서 반드시 필요한 값
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret   # 참조할 ConfigMap 이름
+              key: ROOT_PASSWORD        # 가져올 데이터의 키 이름
+      volumeMounts:
+      # 4번 요구조건: DB 데이터 로컬 저장
+      - name: mysql-data-volume
+        mountPath: /var/lib/mysql
+      # 2번 요구조건: 초기화 스크립트 마운트
+      - name: mysql-init-volume
+        mountPath: /docker-entrypoint-initdb.d/init.sql
+        subPath: init.sql
+  volumes:
+    - name: mysql-data-volume
+      hostPath:
+        path: /data/mysql
+        type: DirectoryOrCreate
+    - name: mysql-init-volume
+      configMap:
+        name: mysql-init-config
+
+---
+# 4. 3번 요구조건: NodePort Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-nodeport-service
+spec:
+  type: NodePort
+  selector:
+    app: secret-mysql
+  ports:
+    - port: 3306        # 서비스 클러스터 내부 포트
+      targetPort: 3306  # 컨테이너 포트
+  type: NodePort
