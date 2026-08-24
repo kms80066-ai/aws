@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-nginx-pod
+  labels:
+    app: my-nginx
+spec:
+  containers:
+  - name: my-nginx-container
+    image: nginx:1.31.3-alpine
+    volumeMounts:
+    - name: my-nginx-volume      # volumes 세션에 정의 된 볼륨 이름
+      mountPath: /var/log/nginx  # 컨테이너 내부 디렉토리 또는 파일 경로
+      # readOnly: true           # volume을 읽기 전용으로 선언. log 파일이라 읽기 전용으로 하면 안됨
+  - name: prt-nginx-log
+    image: busybox:latest
+    command: ["/bin/sh", "-c"]
+    args:                        # 명령들의 나열
+    - |
+      # cat /shared-data/access.log
+      # 로그 파일이 생성될 때까지 대기 후 지속 스트리밍
+      while [ ! -f /shared-data/access.log ]; do sleep 1; done
+      tail -n+1 -F /shared-data/access.log
+    volumeMounts:
+    - name: my-nginx-volume
+      mountPath: /shared-data
+      readOnly: true
+  volumes:  # container와 level(들여쓰기)를 맞춰야함
+  - name: my-nginx-volume          # 볼륨 이름
+    emptyDir: {}                   # emptyDir 볼륨 정의
+

@@ -1,0 +1,15 @@
+apiVersion: v1    # kubectl api-resources에 나오는 버전 값
+kind: Pod
+metadata:
+  name: env-demo-pod  # 파드의 이름 정의
+spec:
+  containers:
+    - name: app-container
+      image: busybox:latest
+      command: ["/bin/sh","-c","echo GoodBye $APP_ENV, DB Host is $DB_HOST; sleep 120"]
+      env:  # 운영체제에 변수를 설정하는 것
+        - name: APP_ENV
+          value: "development"
+        - name: DB_HOST
+          value: "kms26.cloud"
+    
