@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx1-deploy
+spec:
+  replicas: 3
+# -----------(중요)업데이트 방식------------------------------------------------
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1           # 업데이트 중 replicas 보다 최대 몇개 더 파드를 초과 생성할 수 있는지
+      maxUnavailable: 0      # 동시에 내릴 파드의 개수(0으로 놓으면 무중단 배포가 가능하게 됨)
+# -----------------------------------------------------------------------------
+  selector:
+    matchLabels:
+      app: my-nginx
+  template:
+    metadata:
+      labels:
+        app: my-nginx
+    spec:
+      containers:
+      - name: nginx-container
+        image: nginx:1.31.3-alpine
+        ports:
+        - containerPort: 80
+# --------------컨테이너의 리소스 정의---------------------
+        resources:
+          requests:                   #최소 리소스
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"           #최대 리소스
+            cpu: "500m"   # Limits > Requests(Burstable 판정)
+# -----------헬스 체크------------------------------------------------
+        livenessProbe:                    # 컨테이너 사용 가능 유무를 지속적으로 확인
+          httpGet:
+            path: /                       # 헬스 체크를 위해 요청을 보낼 HTTP URL 경로(루트 경로)
+            port: 80                      # 헬스 체크 요청을 보낼 컨테이너의 포트 번호
+          initialDelaySeconds: 30         # 컨테이너가 시작된 후 첫번째 Liveness 검사를 수행하기 전까지 대기하는 시간(초)
+          periodSeconds: 10               # 헬스 체크를 수행하는 주기
+        readinessProbe:                   # 사용할 준비가 되었는지 확인
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+# -----------환경 변수------------------------------------------------
+        env:
+        - name: DATABASE_HOST                           # 환경 변수명
+          value: "mysql.default.svc.cluster.local"      # 정의된 환경 변수의 값
+        - name: APP_NEW
+          value: "production"
+        # - name: API_KEY               # 컨테이너 내부에서 사용할 환경 변수
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: my-secret
+        #       key: api-key            # my-secret에 정의된 api-key:"가져오는 값"의 값
+# -----------볼륨------------------------------------------------
+      #   volumeMounts:
+      #   - name: config-volume
+      #     mountPath: /etc/config        # 컨테이너 내부 경로
+      # volumes:
+      # - name: config-volume
+      #   configMap:
+      #     name: my-configmap            # ConfigMap의 이름
+# -----------롤백------------------------------------------------
+# kubectl rollout undo deployment/<deployment_name>
+# -----------배포 진행상태 확인-----------------------------------
+# kubectl rollout status deployment/<deployment_name>
+# -----------파드 개수의 동적 조절--------------------------------
+# kubectl scale deployment/<deployment_name> --replicas=<개수>
+
+
+

@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-statefulset
+spec:
+  serviceName: mysql-headless   # (필수)헤드리스 서비스의 이름
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-lb
+  template:
+    metadata:
+      labels:
+        app: mysql-lb
+    spec:
+      containers:
+      - name: mysql-container
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "qwe123"
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-data
+        hostPath:
+          path: /tmp/mysql-data
+          type: DirectoryOrCreate

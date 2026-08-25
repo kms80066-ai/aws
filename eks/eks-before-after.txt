@@ -1,0 +1,19 @@
+# 강의 종료 후: 워커 노드 비활성화
+eksctl scale nodegroup --cluster=std09-ex1-cluster \
+--name=std09-ex-eks-ng \
+--nodes=0 \
+--nodes-min=0 \
+--nodes-max=3
+
+# 강의 시작 전: EKS 워커노드 활성화
+eksctl scale nodegroup --cluster=std09-ex1-cluster \
+--name=std09-ex-eks-ng \
+--nodes=2 \
+--nodes-min=1 \
+--nodes-max=3
+
+# 현재 kubectl이 바라보고 있는 클러스터 이름 확인
+kubectl config current-context
+
+# 특정 EKS Cluster의 노드그룹 확인
+eksctl get nodegroup --cluster std09-ex1-cluster

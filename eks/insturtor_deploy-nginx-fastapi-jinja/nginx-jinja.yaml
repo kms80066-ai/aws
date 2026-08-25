@@ -1,0 +1,414 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-configmap
+data:
+  default.conf: |
+    charset utf-8;
+
+    server {
+        listen 80;
+        server_name _; # ALB를 통해 들어오므로 모든 호스트 허용
+
+        # 클라이언트 실제 IP 및 프로토콜 전달 설정
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto; # ALB가 보낸 프로토콜(https) 전달
+
+        # 1. 프론트엔드 정적 파일
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+
+        # 2. FastAPI 백엔드 프록시
+        location /kubernetes/ {
+    # 경로 변환: proxy_pass의 마지막에 /를 붙이면 location오른 쪽의 경로를 제거해 줌
+            proxy_pass http://fastapi-svc:8000/;
+            
+            
+            # 타임아웃 값을 넉넉히 300초로 늘려봅니다.
+            proxy_connect_timeout 300s;
+            proxy_send_timeout 300s;
+            proxy_read_timeout 300s;
+            
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
+  index.html: |
+    <!doctype html>
+    <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Ian's Cloud Lab | Docker Course</title>
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap"
+          rel="stylesheet"
+        />
+        <style>
+          body {
+            font-family: "Noto Sans KR", sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+          }
+          /* Hero Section */
+          .hero-section {
+            background: linear-gradient(135deg, #1a3a7a 0%, #326ce5 100%);
+            color: white;
+            padding: 80px 0 50px;
+            text-align: center;
+          }
+          /* Menu Container */
+          .menu-container {
+            flex: 1;
+            padding: 50px 0;
+          }
+          .section-title {
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: 700;
+            color: #1a3a7a;
+          }
+          /* Navigation Card Style */
+          .nav-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px 20px;
+            text-align: center;
+            text-decoration: none;
+            color: #333;
+            transition: all 0.3s ease;
+            border: 1px solid #e0e0e0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+          }
+          .nav-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 24px rgba(50, 108, 229, 0.15);
+            border-color: #326ce5;
+            color: #326ce5;
+          }
+          .nav-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+          }
+          .nav-card h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+          }
+          .nav-card p {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0;
+          }
+          footer {
+            background: #212529;
+            color: rgba(255, 255, 255, 0.6);
+            padding: 25px 0;
+            text-align: center;
+            margin-top: auto;
+          }
+        </style>
+      </head>
+      <body>
+        <header class="hero-section">
+          <div class="container">
+            <h1 class="display-5 fw-bold mb-2">Docker Master Class</h1>
+            <p class="lead opacity-75">
+              Cloud Infrastructure & Container Technology Lab
+            </p>
+          </div>
+        </header>
+
+        <main class="menu-container">
+          <div class="container">
+            <h2 class="section-title">강좌 커리큘럼</h2>
+            <div class="row g-4">
+              <div class="col-md-4 col-lg-2">
+                <a href="index.html" class="nav-card">
+                  <div class="nav-icon">🏠</div>
+                  <h3>홈</h3>
+                  <p>메인 대시보드</p>
+                </a>
+              </div>
+
+              <div class="col-md-4 col-lg-2">
+                <a href="docker-install.html" class="nav-card">
+                  <div class="nav-icon">⚙️</div>
+                  <h3>설치/설정</h3>
+                  <p>OS별 환경 구축</p>
+                </a>
+              </div>
+
+              <div class="col-md-4 col-lg-2">
+                <a href="docker-command.html" class="nav-card">
+                  <div class="nav-icon">💻</div>
+                  <h3>명령어</h3>
+                  <p>Run, Exec, Network</p>
+                </a>
+              </div>
+
+              <div class="col-md-4 col-lg-2">
+                <a href="docker-build.html" class="nav-card">
+                  <div class="nav-icon">🛠️</div>
+                  <h3>도커 빌드</h3>
+                  <p>Dockerfile 최적화</p>
+                </a>
+              </div>
+
+              <div class="col-md-4 col-lg-2">
+                <a href="docker-compose.html" class="nav-card">
+                  <div class="nav-icon">🐙</div>
+                  <h3>컴포즈</h3>
+                  <p>멀티 컨테이너 관리</p>
+                </a>
+              </div>
+
+              <div class="col-md-4 col-lg-2">
+                <a href="docker-swarm.html" class="nav-card">
+                  <div class="nav-icon">🐝</div>
+                  <h3>스웜</h3>
+                  <p>오케스트레이션 실습</p>
+                </a>
+              </div>
+            </div>
+
+            <div class="mt-5 pt-4 border-top">
+              <div class="row justify-content-center">
+                <div class="col-md-3">
+                  <a href="/kubernetes" class="nav-card py-3">
+                    <div class="nav-icon fs-4">☸️</div>
+                    <h3 class="fs-6">KUBERNETES</h3>
+                  </a>
+                </div>
+                <div class="col-md-3">
+                  <a href="/board/list.html" class="nav-card py-3">
+                    <div class="nav-icon fs-4">📋</div>
+                    <h3 class="fs-6">게시판 서비스</h3>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer>
+          <div class="container">
+            <p>&copy; 2026 Ian's Cloud Lab | Solution Architect Guide</p>
+          </div>
+        </footer>
+
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+      </body>
+    </html>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deploy
+spec:
+  # replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: nginx-lb
+  # 아래 부터 파드에 대한 설정
+  template:
+    metadata:
+      labels:
+        app: nginx-lb
+    spec:
+      containers:
+        - name: nginx-container
+          image: nginx:1.31.3-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+          - name: nginx-vol          # ConfigMap 마운트를 위한 볼륨 이름
+            mountPath: /etc/nginx/conf.d/default.conf   # 컨테이너 내부 경로 및 파일명까지 기재
+            subPath: default.conf     # ConfigMap의 특정 키(파일명)를 지정
+          - name: nginx-vol   
+            mountPath: /usr/share/nginx/html/index.html # 컨테이너 내부 경로 및 파일명까지 기재
+            subPath: index.html       # ConfigMap의 특정 키(파일명)를 지정
+        
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+          # env:
+          # - name: NGINX_PORT
+          #   value: "80"
+          livenessProbe:
+            httpGet:
+              path: /       # nginx의 특성상 헬스체크 경로는 루트로 재 정의
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /       # nginx의 특성상 헬스체크 경로는 루트로 재 정의
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+      volumes:
+        - name: nginx-vol
+          configMap:  # ConfigMap을 볼륨의 소스로 지정
+            name: nginx-configmap  # ConfigMap 이름 지정
+---
+# HPA(Horizontal Pod Autoscaler)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deploy  # <워커로드 이름> 여기선 Deployment_name
+  minReplicas: 1        # <파드의 최소 유지 갯수>
+  maxReplicas: 3        # <파드의 최대 갯수>
+  metrics:
+    - type: Resource  # resource(파드의 cpu or memory), Pods(초당 요청수, 응답 지연 시간), 
+                      # Object(Ingress-ALB 로 유입되는 트래픽의 양), External(AWS SQS 서비스 큐 메시지 갯수)
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80 # %
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deploy
+spec:
+  # replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: fastapi-lb
+  # 아래 부터 파드에 대한 설정
+  template:
+    metadata:
+      labels:
+        app: fastapi-lb
+    spec:
+      containers:
+        - name: fastapi-container
+          image: 925047940866.dkr.ecr.ap-south-1.amazonaws.com/bipa17-instructor/fastapi:kubernetes-v1
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "600m"
+          # env:
+          # - name: NGINX_PORT
+          #   value: "80"
+          livenessProbe:
+            httpGet:
+              path: /db-check       # nginx의 특성상 헬스체크 경로는 루트로 재 정의
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /db-check       # nginx의 특성상 헬스체크 경로는 루트로 재 정의
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+# HPA(Horizontal Pod Autoscaler)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fastapi-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fastapi-deploy  # <워커로드 이름> 여기선 Deployment_name
+  minReplicas: 2        # <파드의 최소 유지 갯수>
+  maxReplicas: 6        # <파드의 최대 갯수>
+  metrics:
+    - type: Resource  # resource(파드의 cpu or memory), Pods(초당 요청수, 응답 지연 시간), 
+                      # Object(Ingress-ALB 로 유입되는 트래픽의 양), External(AWS SQS 서비스 큐 메시지 갯수)
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80 # %
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc
+spec:
+  type: LoadBalancer    # 외부 접속을 위한 로드밸런서 정의(CLB)
+  selector:
+    app: nginx-lb
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-svc
+spec:
+  type: ClusterIP    # 외부 접속을 위한 로드밸런서 정의(CLB)
+  selector:
+    app: fastapi-lb
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+
+
+
+
+
+
+
+
+
+
+

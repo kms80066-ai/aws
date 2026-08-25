@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한로로 (HANRORO) - 음반 정리</title>
+    <style>
+        body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background-color: #f4f4f9; color: #333; line-height: 1.6; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; }
+        .profile { display: flex; align-items: center; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; gap: 20px; }
+        .profile-img img { width: 180px; height: 180px; object-fit: cover; border-radius: 50%; border: 3px solid #ddd; }
+        .profile-text { flex: 1; }
+        .section { margin-bottom: 40px; }
+        h2 { border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #2980b9; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
+        
+        /* 앨범 카드 클릭 가능하도록 스타일 추가 */
+        .card { background: #fff; border: 1px solid #ddd; padding: 10px; text-align: center; border-radius: 8px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); border-color: #3498db; }
+        .card img { width: 100%; height: 150px; object-fit: cover; border-radius: 5px; }
+        .card h3 { font-size: 14px; margin: 10px 0 5px; }
+        .card p { font-size: 12px; color: #666; margin: 0; }
+        .card .click-info { font-size: 11px; color: #3498db; margin-top: 5px; font-weight: bold; }
+
+        /* 모달 (팝업창) 스타일 */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); align-items: center; justify-content: center; }
+        .modal-content { background-color: #fff; padding: 30px; border-radius: 12px; max-width: 450px; width: 90%; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3); text-align: center; }
+        .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; font-weight: bold; color: #aaa; cursor: pointer; }
+        .close-btn:hover { color: #000; }
+        .modal-img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 15px; }
+        .tracklist { text-align: left; background: #f8f9fa; padding: 15px 20px; border-radius: 8px; margin-top: 15px; }
+        .tracklist ol { margin: 0; padding-left: 20px; }
+        .tracklist li { margin-bottom: 6px; font-size: 14px; }
+        .title-badge { background-color: #e74c3c; color: white; font-size: 10px; padding: 2px 5px; border-radius: 3px; margin-left: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>한로로 (HANRORO) 음반 정보</h1>
+        
+        <!-- 프로필 섹션 -->
+        <div class="profile">
+            <div class="profile-img">
+                <img src="images/profile.jpg" alt="한로로 프로필">
+            </div>
+            <div class="profile-text">
+                <h2>아티스트 소개</h2>
+                <p>국문학과 출신인 만큼 가사의 정서에 집중하며, 한로로만의 깊은 감성을 가진 싱어송라이터입니다. 은유적인 표현과 한글 가사의 맛을 살리는 것이 특징입니다.</p>
+            </div>
+        </div>
+
+        <!-- EP 섹션 -->
+        <div class="section">
+            <h2>EP (미니 앨범) <span style="font-size: 12px; color: #888; font-weight: normal;">(클릭시 수록곡 확인)</span></h2>
+            <div class="grid">
+                <div class="card" onclick="openModal('이상비행', '2023.08.29', 'images/ep_이상비행.jpg', ['이상비행', '해초', '화해 [TITLE]', '금붕어 [TITLE]', '자처', '사랑하게 될 거야'])">
+                    <img src="images/ep_이상비행.jpg" alt="이상비행">
+                    <h3>이상비행</h3>
+                    <p>2023.08.29</p>
+                    <div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('집', '2024.05.28', 'images/ep_집.jpg', ['귀가', 'ㅈㅣㅂ [TITLE]', '먹이사슬', '놀이터', '재 [TITLE]', '생존법', '보수공사'])">
+                    <img src="images/ep_집.jpg" alt="집">
+                    <h3>집</h3>
+                    <p>2024.05.28</p>
+                    <div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('자몽살구클럽', '2025.08.04', 'images/ep_자몽살구클럽.jpg', ['내일에서 온 티켓', '용의자', '갈림길', '0+0', '__에게', '시간을 달리네 [TITLE]', '도망'])">
+                    <img src="images/ep_자몽살구클럽.jpg" alt="자몽살구클럽">
+                    <h3>자몽살구클럽</h3>
+                    <p>2025.08.04</p>
+                    <div class="click-info">수록곡 보기 🎵</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 싱글 섹션 -->
+        <div class="section">
+            <h2>주요 싱글 <span style="font-size: 12px; color: #888; font-weight: normal;">(클릭시 수록곡 확인)</span></h2>
+            <div class="grid">
+                <div class="card" onclick="openModal('입춘', '2022.03.14', 'images/single_입춘.jpg', ['입춘 [TITLE]'])">
+                    <img src="images/single_입춘.jpg" alt="입춘"><h3>입춘</h3><p>2022.03.14</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('거울', '2022.06.18', 'images/single_거울.jpg', ['거울 [TITLE]'])">
+                    <img src="images/single_거울.jpg" alt="거울"><h3>거울</h3><p>2022.06.18</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('비틀비틀 짝짜꿍', '2022.09.14', 'images/single_비틀비틀짝짜꿍.jpg', ['비틀비틀 짝짜꿍 [TITLE]'])">
+                    <img src="images/single_비틀비틀짝짜꿍.jpg" alt="비틀비틀 짝짜꿍"><h3>비틀비틀 짝짜꿍</h3><p>2022.09.14</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('정류장', '2023.01.04', 'images/single_정류장.jpg', ['정류장 [TITLE]'])">
+                    <img src="images/single_정류장.jpg" alt="정류장"><h3>정류장</h3><p>2023.01.04</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('자처', '2023.04.21', 'images/single_자처.jpg', ['자처 [TITLE]'])">
+                    <img src="images/single_자처.jpg" alt="자처"><h3>자처</h3><p>2023.04.21</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('하루살이', '2023.12.26', 'images/single_하루살이.jpg', ['하루살이 [TITLE]'])">
+                    <img src="images/single_하루살이.jpg" alt="하루살이"><h3>하루살이</h3><p>2023.12.26</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('나침반', '2024.10.29', 'images/single_나침반.jpg', ['나침반 [TITLE]'])">
+                    <img src="images/single_나침반.jpg" alt="나침반"><h3>나침반</h3><p>2024.10.29</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+                <div class="card" onclick="openModal('애증', '2026.04.02', 'images/single_애증.jpg', ['게임 오버 ? [TITLE]', '1111'])">
+                    <img src="images/single_애증.jpg" alt="애증"><h3>애증</h3><p>2026.04.02</p><div class="click-info">수록곡 보기 🎵</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달 팝업 구조 -->
+    <div id="albumModal" class="modal" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <span class="close-btn" onclick="closeModalDirect()">&times;</span>
+            <img id="mImg" class="modal-img" src="" alt="앨범 커버">
+            <h2 id="mTitle" style="margin: 0 0 5px 0; border: none; color: #2c3e50;"></h2>
+            <p id="mDate" style="color: #777; font-size: 13px; margin: 0;"></p>
+            <div class="tracklist">
+                <h4 style="margin: 0 0 10px 0; color: #2980b9;">🎼 수록곡 목록</h4>
+                <ol id="mTracks"></ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- 스크립트 -->
+    <script>
+        function openModal(title, date, imgSrc, tracks) {
+            document.getElementById('mTitle').innerText = title;
+            document.getElementById('mDate').innerText = '발매일: ' + date;
+            document.getElementById('mImg').src = imgSrc;
+
+            const tracksList = document.getElementById('mTracks');
+            tracksList.innerHTML = '';
+            
+            tracks.forEach(track => {
+                const li = document.createElement('li');
+                if(track.includes('[TITLE]')) {
+                    const cleanTitle = track.replace('[TITLE]', '').trim();
+                    li.innerHTML = `<strong>${cleanTitle}</strong> <span class="title-badge">TITLE</span>`;
+                } else {
+                    li.innerText = track;
+                }
+                tracksList.appendChild(li);
+            });
+
+            document.getElementById('albumModal').style.display = 'flex';
+        }
+
+        function closeModalDirect() {
+            document.getElementById('albumModal').style.display = 'none';
+        }
+
+        function closeModal(event) {
+            if (event.target.id === 'albumModal') {
+                closeModalDirect();
+            }
+        }
+    </script>
+</body>
+</html>

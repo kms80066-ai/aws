@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <deployment_name>
+spec:
+  replicas: <파드갯수>                     # 유지할 파드 개수
+  selector:
+    matchLabels:
+      app: <파드 라벨 >                    # 디플로이먼트가 관리할 파드 정의
+  template:
+    metadata:
+      labels:
+        app: <파드 라벨 정의>
+    spec:
+      containers:
+      - name: <컨테이너 이름>
+        image: <이미지이름:태그>
+        ports:
+        - containerPort: <컨테이너 포트>
+        
