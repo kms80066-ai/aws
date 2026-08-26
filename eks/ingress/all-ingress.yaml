@@ -1,0 +1,547 @@
+# 앞서만든 practice-nginx-fastapi와 ingress를 합쳤다.
+# 경로 수정을 한 것이 있어 알아놔야 한다.
+# 보안그룹도 수정해줬다.
+# 이 상태에서는 도메인/nginx 와 도메인/api가 작동한다 /api/docs, /api/healthz, /api/db-check
+
+# FastAPI 코드 & HTML (fastapi-code-config):
+# FastAPI 앱 생성 시 root_path="/api"를 지정하여 /api 하위 경로를 인식하도록 구성했습니다.
+# 템플릿의 돌아가기 링크를 / 대신 /nginx로 변경했습니다.
+
+# Nginx 웹페이지 (nginx-index-html-configmap):
+# Jinja 대시보드로 이동하는 버튼의 링크를 /jinja에서 /api/로 변경했습니다.  
+
+# Nginx 설정 (nginx-conf-config):
+
+# ALB Ingress가 /api 트래픽을 직접 FastAPI로 분기하므로 Nginx 내부의
+#  location /jinja/ 프록시 설정을 제거하고 순수 정적 파일 서빙만 남겼습니다.
+
+# Service Type (nginx-service):
+
+# 불필요한 클래식 로드밸런서 생성을 막기 위해 type: LoadBalancer에서 type: ClusterIP로 변경했습니다.
+
+# Ingress 경로 변환 (transforms.nginx-service):
+
+# /nginx로 들어온 요청에서 접두사를 제거하고 Nginx 컨테이너의 루트(/)로 전달하도록 유지했습니다
+
+# ==========================================
+# 1. FastAPI ConfigMap (코드 & 템플릿)
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-code-config
+data:
+  main.py: |
+    from fastapi import FastAPI, Request, HTTPException
+    from fastapi.responses import HTMLResponse
+    from fastapi.templating import Jinja2Templates
+    import pymysql
+    import os
+
+    # Ingress /api 경로에 맞추어 root_path 지정
+    app = FastAPI(root_path="/api")
+    templates = Jinja2Templates(directory="/app/templates")
+
+    DB_CONFIG = {
+        "host": "db-mysql.cd6e4was8qr6.ca-central-1.rds.amazonaws.com",
+        "user": "std09",
+        "password": "qwerasdf",
+        "database": "testdb",
+        "port": 3306,
+        "charset": "utf8mb4"
+    }
+
+    @app.get("/healthz")
+    def health_check():
+        return {"status": "ok"}
+
+    @app.get("/", response_class=HTMLResponse)
+    async def read_root(request: Request):
+        try:
+            k8s_data = {
+                "title": "Kubernetes Navigation",
+                "subtitle": "컨테이너 오케스트레이션의 바다를 항해하다",
+                "sections": [
+                    {"id": "arch", "title": "Cluster Architecture", "desc": "Control Plane & Worker Node"},
+                    {"id": "object", "title": "K8s Objects", "desc": "Pod, Service, Deployment"},
+                    {"id": "network", "title": "Networking", "desc": "Ingress & Service Mesh"},
+                    {"id": "storage", "title": "Storage & PV", "desc": "Persistent Volumes"}
+                ]
+            }
+            return templates.TemplateResponse(
+                request=request,
+                name="index.html",
+                context={"data": k8s_data}
+            )
+        except Exception as e:
+            return HTMLResponse(content=f"<h1>Template Render Error</h1><p>{str(e)}</p>", status_code=500)
+
+    @app.get("/db-check")
+    def check_db_connection():
+        try:
+            connection = pymysql.connect(**DB_CONFIG)
+            connection.close()
+            return {"status": "connected"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+
+  jinja_index.html: |
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <title>{{ data.title }}</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eef2f3; padding: 30px; text-align: center; }
+            .card { background: white; margin: 15px auto; padding: 20px; max-width: 600px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            a { display: inline-block; margin-top: 20px; text-decoration: none; color: #2980b9; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h1>{{ data.title }}</h1>
+        <p>{{ data.subtitle }}</p>
+        {% for sec in data.sections %}
+        <div class="card">
+            <h3>{{ sec.title }}</h3>
+            <p>{{ sec.desc }}</p>
+        </div>
+        {% endfor %}
+        <!-- Ingress의 Nginx 경로(/nginx)로 이동하도록 수정 -->
+        <a href="/nginx">⬅ 메인 음악 페이지로 돌아가기</a>
+    </body>
+    </html>
+---
+# ==========================================
+# 2. FastAPI Deployment, HPA & Service
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deployment
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: fastapi-app
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+    spec:
+      containers:
+      - name: fastapi-container
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install fastapi uvicorn jinja2 pymysql
+            cd /app
+            exec uvicorn main:app --host 0.0.0.0 --port 8000
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "300m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 35
+          periodSeconds: 5
+        volumeMounts:
+        - name: app-code
+          mountPath: /app/main.py
+          subPath: main.py
+        - name: app-code
+          mountPath: /app/templates/index.html
+          subPath: jinja_index.html
+      volumes:
+      - name: app-code
+        configMap:
+          name: fastapi-code-config
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fastapi-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fastapi-deployment
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-service
+spec:
+  type: ClusterIP
+  selector:
+    app: fastapi-app
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+---
+# ==========================================
+# 3. Nginx ConfigMaps (HTML & 기본 설정)
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-index-html-configmap
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>한로로 (HANRORO) - 음반 정리</title>
+        <style>
+            body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background-color: #f4f4f9; color: #333; line-height: 1.6; margin: 0; padding: 20px; }
+            .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+            h1 { text-align: center; color: #2c3e50; }
+            .profile { display: flex; align-items: center; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; gap: 20px; }
+            .profile-img img { width: 180px; height: 180px; object-fit: cover; border-radius: 50%; border: 3px solid #ddd; }
+            .profile-text { flex: 1; }
+            .section { margin-bottom: 40px; }
+            h2 { border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #2980b9; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
+            .card { background: #fff; border: 1px solid #ddd; padding: 10px; text-align: center; border-radius: 8px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+            .card:hover { transform: translateY(-5px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); border-color: #3498db; }
+            .card img { width: 100%; height: 150px; object-fit: cover; border-radius: 5px; }
+            .card h3 { font-size: 14px; margin: 10px 0 5px; }
+            .card p { font-size: 12px; color: #666; margin: 0; }
+            .card .click-info { font-size: 11px; color: #3498db; margin-top: 5px; font-weight: bold; }
+            .nav-btn-box { text-align: center; margin-bottom: 20px; }
+            .jinja-link-btn { display: inline-block; padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+            .jinja-link-btn:hover { background-color: #2980b9; }
+            .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); align-items: center; justify-content: center; }
+            .modal-content { background-color: #fff; padding: 30px; border-radius: 12px; max-width: 450px; width: 90%; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3); text-align: center; }
+            .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; font-weight: bold; color: #aaa; cursor: pointer; }
+            .close-btn:hover { color: #000; }
+            .modal-img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 15px; }
+            .tracklist { text-align: left; background: #f8f9fa; padding: 15px 20px; border-radius: 8px; margin-top: 15px; }
+            .tracklist ol { margin: 0; padding-left: 20px; }
+            .tracklist li { margin-bottom: 6px; font-size: 14px; }
+            .title-badge { background-color: #e74c3c; color: white; font-size: 10px; padding: 2px 5px; border-radius: 3px; margin-left: 5px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>한로로 (HANRORO) 음반 정보</h1>
+
+            <!-- Ingress의 FastAPI 경로(/api/)로 링크 수정 -->
+            <div class="nav-btn-box">
+                <a href="/api/" class="jinja-link-btn">🚀 FastAPI Jinja2 대시보드로 이동</a>
+            </div>
+
+            <div class="profile">
+                <div class="profile-img">
+                    <img src="images/profile.jpg" alt="한로로 프로필">
+                </div>
+                <div class="profile-text">
+                    <h2>아티스트 소개</h2>
+                    <p>국문학과 출신인 만큼 가사의 정서에 집중하며, 한로로만의 깊은 감성을 가진 싱어송라이터입니다. 은유적인 표현과 한글 가사의 맛을 살리는 것이 특징입니다.</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>EP (미니 앨범) <span style="font-size: 12px; color: #888; font-weight: normal;">(클릭시 수록곡 확인)</span></h2>
+                <div class="grid">
+                    <div class="card" onclick="openModal('이상비행', '2023.08.29', 'images/ep_이상비행.jpg', ['이상비행', '해초', '화해 [TITLE]', '금붕어 [TITLE]', '자처', '사랑하게 될 거야'])">
+                        <img src="images/ep_이상비행.jpg" alt="이상비행">
+                        <h3>이상비행</h3>
+                        <p>2023.08.29</p>
+                        <div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('집', '2024.05.28', 'images/ep_집.jpg', ['귀가', 'ㅈㅣㅂ [TITLE]', '먹이사슬', '놀이터', '재 [TITLE]', '생존법', '보수공사'])">
+                        <img src="images/ep_집.jpg" alt="집">
+                        <h3>집</h3>
+                        <p>2024.05.28</p>
+                        <div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('자몽살구클럽', '2025.08.04', 'images/ep_자몽살구클럽.jpg', ['내일에서 온 티켓', '용의자', '갈림길', '0+0', '__에게', '시간을 달리네 [TITLE]', '도망'])">
+                        <img src="images/ep_자몽살구클럽.jpg" alt="자몽살구클럽">
+                        <h3>자몽살구클럽</h3>
+                        <p>2025.08.04</p>
+                        <div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>주요 싱글 <span style="font-size: 12px; color: #888; font-weight: normal;">(클릭시 수록곡 확인)</span></h2>
+                <div class="grid">
+                    <div class="card" onclick="openModal('입춘', '2022.03.14', 'images/single_입춘.jpg', ['입춘 [TITLE]'])">
+                        <img src="images/single_입춘.jpg" alt="입춘"><h3>입춘</h3><p>2022.03.14</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('거울', '2022.06.18', 'images/single_거울.jpg', ['거울 [TITLE]'])">
+                        <img src="images/single_거울.jpg" alt="거울"><h3>거울</h3><p>2022.06.18</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('비틀비틀 짝짜꿍', '2022.09.14', 'images/single_비틀비틀짝짜꿍.jpg', ['비틀비틀 짝짜꿍 [TITLE]'])">
+                        <img src="images/single_비틀비틀짝짜꿍.jpg" alt="비틀비틀 짝짜꿍"><h3>비틀비틀 짝짜꿍</h3><p>2022.09.14</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('정류장', '2023.01.04', 'images/single_정류장.jpg', ['정류장 [TITLE]'])">
+                        <img src="images/single_정류장.jpg" alt="정류장"><h3>정류장</h3><p>2023.01.04</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('자처', '2023.04.21', 'images/single_자처.jpg', ['자처 [TITLE]'])">
+                        <img src="images/single_자처.jpg" alt="자처"><h3>자처</h3><p>2023.04.21</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('하루살이', '2023.12.26', 'images/single_하루살이.jpg', ['하루살이 [TITLE]'])">
+                        <img src="images/single_하루살이.jpg" alt="하루살이"><h3>하루살이</h3><p>2023.12.26</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('나침반', '2024.10.29', 'images/single_나침반.jpg', ['나침반 [TITLE]'])">
+                        <img src="images/single_나침반.jpg" alt="나침반"><h3>나침반</h3><p>2024.10.29</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                    <div class="card" onclick="openModal('애증', '2026.04.02', 'images/single_애증.jpg', ['게임 오버 ? [TITLE]', '1111'])">
+                        <img src="images/single_애증.jpg" alt="애증"><h3>애증</h3><p>2026.04.02</p><div class="click-info">수록곡 보기 🎵</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="albumModal" class="modal" onclick="closeModal(event)">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <span class="close-btn" onclick="closeModalDirect()">&times;</span>
+                <img id="mImg" class="modal-img" src="" alt="앨범 커버">
+                <h2 id="mTitle" style="margin: 0 0 5px 0; border: none; color: #2c3e50;"></h2>
+                <p id="mDate" style="color: #777; font-size: 13px; margin: 0;"></p>
+                <div class="tracklist">
+                    <h4 style="margin: 0 0 10px 0; color: #2980b9;">🎼 수록곡 목록</h4>
+                    <ol id="mTracks"></ol>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function openModal(title, date, imgSrc, tracks) {
+                document.getElementById('mTitle').innerText = title;
+                document.getElementById('mDate').innerText = '발매일: ' + date;
+                document.getElementById('mImg').src = imgSrc;
+
+                const tracksList = document.getElementById('mTracks');
+                tracksList.innerHTML = '';
+                
+                tracks.forEach(track => {
+                    const li = document.createElement('li');
+                    if(track.includes('[TITLE]')) {
+                        const cleanTitle = track.replace('[TITLE]', '').trim();
+                        li.innerHTML = `<strong>${cleanTitle}</strong> <span class="title-badge">TITLE</span>`;
+                    } else {
+                        li.innerText = track;
+                    }
+                    tracksList.appendChild(li);
+                });
+
+                document.getElementById('albumModal').style.display = 'flex';
+            }
+
+            function closeModalDirect() {
+                document.getElementById('albumModal').style.display = 'none';
+            }
+
+            function closeModal(event) {
+                if (event.target.id === 'albumModal') {
+                    closeModalDirect();
+                }
+            }
+        </script>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-conf-config
+data:
+  default.conf: |
+    charset utf-8;
+
+    server {
+        listen 80;
+        server_name www.kms26.cloud kms26.cloud _;
+
+        # 프론트엔드 정적 서빙 (/jinja 프록시는 ALB Ingress가 직접 처리하므로 제거)
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ =404;
+        }
+    }
+---
+# ==========================================
+# 4. Nginx Deployment, HPA & Service
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: nginx-web
+  template:
+    metadata:
+      labels:
+        app: nginx-web
+    spec:
+      containers:
+      - name: nginx-container
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        env:
+        - name: NGINX_PORT
+          value: "80"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: nginx-html-volume
+          mountPath: /usr/share/nginx/html/index.html
+          subPath: index.html
+        - name: nginx-conf-volume
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        - name: nginx-images-volume
+          mountPath: /usr/share/nginx/html/images
+      volumes:
+      - name: nginx-html-volume
+        configMap:
+          name: nginx-index-html-configmap
+      - name: nginx-conf-volume
+        configMap:
+          name: nginx-conf-config
+      - name: nginx-images-volume
+        hostPath:
+          path: /var/www/images
+          type: DirectoryOrCreate
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: ClusterIP   # Ingress(ALB) 전용으로 사용하므로 ClusterIP로 변경
+  selector:
+    app: nginx-web
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+---
+# ==========================================
+# 5. Ingress (ALB 라우팅)
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alb-base-ingress
+  annotations:
+    alb.ingress.kubernetes.io/security-groups: sg-0bedfef348e915937
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ca-central-1:925047940866:certificate/3352eb5f-ad9a-440d-b66e-0e3528d6a2f6
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # /nginx 요청을 파드 내부 루트(/)로 rewrite
+    alb.ingress.kubernetes.io/transforms.nginx-service: >
+      [
+        {
+          "type": "url-rewrite",
+          "urlRewriteConfig": {
+            "rewrites": [
+              {
+                "regex": "^\\/nginx(?:\\/(.*))?$",
+                "replace": "/$1"
+              }
+            ]
+          }
+        }
+      ]
+spec:
+  ingressClassName: alb
+  rules:
+  - host: "www.kms26.cloud"
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: fastapi-service
+            port:
+              number: 8000
+      - path: /nginx
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80

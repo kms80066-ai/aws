@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  # replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1           # 업데이트 중 replicas 보다 최대 몇개 더 파드를 초과 생성할 수 있는지
+      maxUnavailable: 0      # 동시에 내릴 파드의 개수(0으로 놓으면 무중단 배포가 가능하게 됨)
+  selector:
+    matchLabels:
+      app: nginx-web
+  # 아래부터 파드에 대한 설정
+  template:
+    metadata:
+      labels:
+        app: nginx-web
+    spec:
+      containers:
+      - name: nginx-container
+        image: nginx:1.31.3-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:                   #최소 리소스
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"           #최대 리소스
+            cpu: "500m"   # Limits > Requests(Burstable 판정)
+        env:
+        - name: NGINX_PORT
+          value: "80"
+        livenessProbe:                    # 컨테이너 사용 가능 유무를 지속적으로 확인
+          httpGet:
+            path: /                       # 헬스 체크를 위해 요청을 보낼 HTTP URL 경로(루트 경로)
+            port: 80                      # 헬스 체크 요청을 보낼 컨테이너의 포트 번호
+          initialDelaySeconds: 30         # 컨테이너가 시작된 후 첫번째 Liveness 검사를 수행하기 전까지 대기하는 시간(초)
+          periodSeconds: 10               # 헬스 체크를 수행하는 주기
+        readinessProbe:                   # 사용할 준비가 되었는지 확인
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# HPA(Horizontal Pod Autoscaler)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment  # <워크로드 이름> = 파드 관리자 = 여기서는 deployment의 이름
+  minReplicas: 2  # <파드 최소 유지 개수>
+  maxReplicas: 6  # <파드 최대 개수>
+  metrics:
+  - type: Resource  # resource(파드의 cpu or memory), Pods(초당 요청수, 응답 지연 시간),    무엇을 (기준)으로 pod을 늘리고 줄일 것이냐
+                    # Object(Ingress-ALB로 유입되는 트래픽의 양), External(AWS SQS 서비스 큐 메시지)
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80  # %
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-web
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alb-base-ingress
+  annotations:  # 보안 그룹 등 AWS에 대한 설정들
+    # 보안 그룹 설정
+    alb.ingress.kubernetes.io/security-groups: sg-0bedfef348e915937 # , id, ...
+    # internet-facing: 외부 로드밸런서(IP 부여), internet: 내부
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # ip: (Pod의 IP로 트래픽 전달)
+    alb.ingress.kubernetes.io/target-type: ip # instance: EC2 인스턴스를 대상으로 하는 타겟 그룹 생성
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    # HTTPS 인증서 정의
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ca-central-1:925047940866:certificate/3352eb5f-ad9a-440d-b66e-0e3528d6a2f6
+    # HTTP 접속시 HTTPS로 리다이렉션(선택사항, 권장)
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # 경로 재설정
+    # Nginx Ingress Controller 사용시: nginx.ingress.kubernetes.io/rewrite-target: /
+    alb.ingress.kubernetes.io/transforms.nginx-service: >
+      [
+        {
+          "type": "url-rewrite",
+          "urlRewriteConfig": {
+            "rewrites": [
+              {
+                "regex": "^\\/nginx(?:\\/(.*))?$",
+                "replace": "/$1"
+              }
+            ]
+          }
+        }
+      ]
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      # - host: "www.kms26.cloud"
+      #   path: /api        # fastAPI: main.py의 app= FastAPI(root_path="/api")
+      #   pathType: Prefix
+      #   backend:
+      #     service:
+      #       name: fastapi-service
+      #       port:
+      #         number: 8000
+      - path: /nginx
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80
+

@@ -1,0 +1,118 @@
+# --------------------------------------------------------------
+1. # helm 쿠버네티스 패키지 관리자 설치
+# helm 버전 확인
+helm version
+
+# 설치
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# Helm 레포지토리 추가 및 레포지토리 목록 업데이트
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+
+# --------------------------------------------------------------
+# 2. IAM 정책 생성 (한 번만 하면 됩니다)
+
+# 기존 정책 확인
+aws iam list-policies --scope Local \
+--query 'Policies[?contains(PolicyName, `std09-`)].[PolicyName, Arn]' \
+--output table
+
+# 로드밸런서 컨트롤러에 부여할 정책파일 다운로드
+curl -o iam_policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+
+# 3-3. 정책 파일을 이용한 정책 생성
+aws iam create-policy \
+--policy-name std09-AWSLoadBalancerControllerIAMPolicy \
+--policy-document file://iam_policy.json \
+--tags 'Key=Name,Value=std09-AWSLoadBalancerControllerIAMPolicy' 'Key=Owner,Value=std09'
+
+# 3-4. 생성된 정책 확인: arn을 복사하여 5-1--attach~의 arn에 붙여넣기
+aws iam list-policies --scope Local \
+--query 'Policies[?PolicyName==`std09-AWSLoadBalancerControllerIAMPolicy`].Arn' \
+--output text
+
+# --------------------------------------------------------------
+# 4. CRD(Custom Resource Definitions) 설치
+# AWS에 사용자가 직접 리소스를 만들어 사용 할 수 있도로 구성하는 것.
+kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/crds?ref=master"
+
+# --------------------------------------------------------------
+# 5. iamserviceaccount 생성: 쿠버네티스 파드에게 AWS IAM 권한을 부여할 수 있도록 해주는 도구
+# 생성
+# 아래 "attach-policy-arn=" 오른쪽에 확인(저장)해 놓은 정책의 ARN으로 수정하세요.
+# 이때 --name는 고정값 입니다.
+eksctl create iamserviceaccount \
+  --cluster=std09-ex1-cluster \
+  --region=ca-central-1 \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --attach-policy-arn=arn:aws:iam::925047940866:policy/std09-AWSLoadBalancerControllerIAMPolicy \
+  --override-existing-serviceaccounts \
+  --approve
+
+# 생성 확인: Annotations 값이 잘 들어갔는지 확인
+kubectl describe sa aws-load-balancer-controller -n kube-system
+
+# 생성 확인: Annotations 값이 잘 들어갔는지 확인
+kubectl get sa aws-load-balancer-controller -n kube-system -o yaml
+
+# --------------------------------------------------------------
+# 5. AWS LoadBalancer 컨트롤러 설치
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=std09-ex1-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set region=ca-central-1 \
+  --set vpcId=vpc-0e599640b22e89a0f
+
+# 설치 확인
+kubectl get deployment -n kube-system aws-load-balancer-controller
+
+# 버전 확인
+kubectl get deployment -n kube-system aws-load-balancer-controller \
+  -o jsonpath='{.spec.template.spec.containers[0].image}' && echo
+
+# 파드 확인
+kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+
+# 역할 확인
+kubectl describe sa aws-load-balancer-controller \
+-n kube-system | grep Annotations
+
+# 문제가 있을경우 로그 확인
+kubectl logs -n kube-system \
+-l app.kubernetes.io/name=aws-load-balancer-controller
+
+# #####################################################
+# 삭제
+# #####################################################
+# Helm 릴리즈 삭제 (소프트웨어 제거)
+helm uninstall aws-load-balancer-controller -n kube-system
+
+# IAM Service Account 삭제
+eksctl delete iamserviceaccount \
+  --cluster=ian-ex-cluster \
+  --region=ap-south-1 \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller
+  
+# IAM 정책 삭제 (권한 서류 파기)
+aws iam delete-policy --policy-arn arn:aws:iam::925047940866:policy/ian-ex-AWSLoadBalancerControllerIAMPolicy
+
+# CRD 삭제 (기반 시설 철거)
+kubectl delete -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/crds?ref=master"
+
+# 1. Deployment와 Service 강제 삭제
+kubectl delete deployment -n kube-system aws-load-balancer-controller --ignore-not-found
+kubectl delete service -n kube-system aws-load-balancer-webhook-service --ignore-not-found
+
+# 2. RBAC(권한) 및 웹훅 설정 삭제 (이게 남아있으면 재설치 시 충돌납니다)
+kubectl delete clusterrole aws-load-balancer-controller --ignore-not-found
+kubectl delete clusterrolebinding aws-load-balancer-controller --ignore-not-found
+kubectl delete mutatingwebhookconfigurations mservice.elbv2.k8s.aws --ignore-not-found
+kubectl delete validatingwebhookconfigurations vingress.elbv2.k8s.aws --ignore-not-found
+
+# 확인
+kubectl get all -n kube-system | grep aws-load-balancer
