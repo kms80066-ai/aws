@@ -14,6 +14,26 @@ eksctl scale nodegroup --cluster=std09-ex1-cluster \
 
 # 현재 kubectl이 바라보고 있는 클러스터 이름 확인
 kubectl config current-context
+# 전체 확인
+kubectl config get-contexts
 
 # 특정 EKS Cluster의 노드그룹 확인
 eksctl get nodegroup --cluster std09-ex1-cluster
+
+# EKS Cluster에 mysql 용 노드 그룹 추가 생성
+eksctl create nodegroup \
+--cluster=std09-ex1-cluster \
+--region ca-central-1 \
+--name mysql-ng \
+--node-type t3.small \
+--nodes 3 \
+--node-volume-size 20 \
+--ssh-access \
+--ssh-public-key std09-keypair \
+--managed
+
+# 노드 그룹 삭제
+eksctl delete nodegroup \
+--cluster std09-ex1-cluster \
+--region ca-central-1 \
+--name mysql-ng

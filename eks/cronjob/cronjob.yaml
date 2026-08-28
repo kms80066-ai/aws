@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup-cron
+spec:
+  schedule: "0/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mysql-backup-container
+            image: mysql:8.0  # 대상 파드와 동일한 이미지 사용 권장
+            command:
+            - /bin/sh
+            - -c
+            - |
+              Backup_Dir="/backup/$(date +%Y%m%d)"
+              mkdir -p ${Backup_Dir}/mysql-sfs-1 ${Backup_Dir}/mysql-sfs-2
+              TimeStamp="$(date +%H%M%S).sql"
+              mysqldump -h mysql-sfs-1.mysql-headless -u root -pqwerasdf --all-databases > ${Backup_Dir}/mysql-sfs-1/${TimeStamp}
+              mysqldump -h mysql-sfs-2.mysql-headless -u root -pqwerasdf --all-databases > ${Backup_Dir}/mysql-sfs-2/${TimeStamp}              
+            volumeMounts:
+            - name: efs-backup-volume
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: efs-backup-volume
+            persistentVolumeClaim:
+              claimName: efs-pvc

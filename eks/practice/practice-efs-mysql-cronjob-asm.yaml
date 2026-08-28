@@ -1,0 +1,247 @@
+# 1. StorageClass 정의: 어떤 드라이버의 어떤 파일시스템을 사용할지
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com  # 사용할 드라이버
+
+---
+# 2. PV 정의
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: fs-08098383476e603d4  # 사용할 EFS ID 입력
+
+---
+# 3. PVC 정의
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: efs-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 5Gi
+  volumeName: efs-pv
+
+---
+# 4. secret 생성(MySQL Root 비밀번호)
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: mysql-secret
+# type: Opaque
+# data:
+#   ROOT_PASSWORD: "cXdlcmFzZGY=" # qwerasdf (base64)
+
+# ---
+
+# 4. AWS Secrets Manager 연동 통로 정의
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: aws-secretsmanager
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ca-central-1
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets
+---
+# 5. AWS 시크릿을 쿠버네티스 Secret으로 동기화 (mysql-secret-from-aws 생성)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret                  # 쿠버네티스 외부(AWS 등)의 비밀 정보를 클러스터 내부로 연동하겠다는 선언
+metadata:
+  name: mysql-aws-secret              # 이 ExternalSecret 오브젝트 자체의 이름입니다.
+  namespace: default                  # 이 리소스가 생성될 네임스페이스입니다. 기본값인 default
+spec:
+  refreshInterval: "1h"               # AWS Secrets Manager의 최신 값을 1시간마다 주기적으로 동기화합니다
+  secretStoreRef:
+    name: aws-secretsmanager          # 미리 만들어둔 연결 설정(ClusterSecretStore)의 이름입니다.
+    kind: ClusterSecretStore          # 참조할 저장소 오브젝트의 종류가 클러스터 전용(ClusterSecretStore)임을 명시합니다
+  target:
+    name: mysql-secret-from-aws       # AWS에서 가져온 값으로 쿠버네티스 내부 시크릿을 새로 생성할 때 붙일 이름입니다.
+    creationPolicy: Owner             # 이 ExternalSecret이 삭제될때 생성된 쿠버네티스 시크릿도 함께 자동 삭제되도록
+  data:
+  - secretKey: MYSQL_ROOT_PASSWORD    # 생성될 쿠버네티스 시크릿 내부에서 사용할 키 이름입니다. (파드가 이 이름으로)
+    remoteRef:
+      key: std09-mysql-secret         # 실제 AWS Secrets Manager에 저장되어 있는 시크릿의 이름 또는 경로 입니다.
+      property: MYSQL_ROOT_PASSWORD   # AWS 시크릿 내부(JSON 형태)에서 가져올 특정 필드(KEY) 이름입니다.
+
+---
+# 6. ConfigMap(컨테이너 최초 실행 시 자동 실행됭 init.sql 스크립트)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-config
+data:
+  init.sql: |
+    CREATE USER IF NOT EXISTS 'std09'@'%' IDENTIFIED WITH mysql_native_password BY 'qwerasdf';
+    GRANT REPLICATION SLAVE ON *.* TO 'std09'@'%';
+    FLUSH PRIVILEGES;
+
+---
+# 7. Service 생성: svc와 pod 상호간 확인을 위한 생성(헤드리스 서비스, Statefulset에서 사용)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-headless
+spec:
+  clusterIP: None
+  selector:
+    app: mysql-lb
+  ports:
+  - port: 3306
+    name: mysql-port
+
+---
+# 8. 워커노드에 생성할 볼륨 드라이버 정의
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-sc
+  annotations:
+    # (선택사항) 기본 스토리지 클래스로 지정
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com  # 사용할 드라이버
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: gp3
+
+---
+# 9. MySQL을 Statefulset으로 배포
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-sfs
+spec:
+  serviceName: mysql-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mysql-lb
+  template:
+    metadata:
+      labels: 
+        app: mysql-lb
+    spec:
+      # nodeSelector:
+      #   eks.amazonaws.com/nodegroup: mysql-ng
+      # tolerations:
+      # - key: "dedicated"
+      #   operator: "Equal"
+      #   value: "database"
+      #   effect: "NoSchedule"
+      containers:
+      - name: mysql-container
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+          name: mysql-port
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret-from-aws
+              key: MYSQL_ROOT_PASSWORD
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+        - name: mysql-init-volume
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: mysql-init-volume
+        configMap:
+          name: mysql-init-config
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: gp3-sc
+      resources:
+        requests:
+          storage: 5Gi
+
+
+# EKS Cluster에 mysql 용 노드 그룹 추가 생성
+# eksctl create nodegroup \
+# --cluster=std09-ex1-cluster \
+# --region ca-central-1 \
+# --name mysql-ng \
+# --node-type t3.small \
+# --nodes 3 \
+# --node-volume-size 20 \
+# --ssh-access \
+# --ssh-public-key std09-keypair \
+# --managed
+
+# 노드 그룹 삭제
+# eksctl delete nodegroup \
+# --cluster std09-ex1-cluster \
+# --region ca-central-1 \
+# --name mysql-ng
+
+
+# 태그 추가?
+# kubectl taint nodes \
+# -l eks.amazonaws.com/nodegroup=mysql-ng \
+# dedicated=database:NoSchedule
+
+---
+# 10. 백업 CronJob (비밀번호 환경변수 연동)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup-cron
+spec:
+  schedule: "0/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mysql-backup-container
+            image: mysql:8.0  # 대상 파드와 동일한 이미지 사용 권장
+            command:
+            - /bin/sh
+            - -c
+            - |
+              Backup_Dir="/backup/$(date +%Y%m%d)"
+              mkdir -p ${Backup_Dir}/mysql-sfs-1 ${Backup_Dir}/mysql-sfs-2
+              TimeStamp="$(date +%H%M%S).sql"
+              mysqldump -h mysql-sfs-1.mysql-headless -u root -p${MYSQL_ROOT_PASSWORD} --all-databases > ${Backup_Dir}/mysql-sfs-1/${TimeStamp}
+              mysqldump -h mysql-sfs-2.mysql-headless -u root -p${MYSQL_ROOT_PASSWORD} --all-databases > ${Backup_Dir}/mysql-sfs-2/${TimeStamp}              
+            env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret-from-aws
+                  key: MYSQL_ROOT_PASSWORD
+            volumeMounts:
+            - name: efs-backup-volume
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: efs-backup-volume
+            persistentVolumeClaim:
+              claimName: efs-pvc
+---

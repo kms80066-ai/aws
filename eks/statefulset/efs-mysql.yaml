@@ -1,0 +1,169 @@
+# 1. StorageClass 정의: 어떤 드라이버의 어떤 파일시스템을 사용할지
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com  # 사용할 드라이버
+
+---
+# 2. PV 정의
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: fs-08098383476e603d4  # 사용할 EFS ID 입력
+
+---
+# 3. PVC 정의
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: efs-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 5Gi
+  volumeName: efs-pv
+
+---
+# 4. secret 생성(MySQL Root 비밀번호)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  ROOT_PASSWORD: "cXdlcmFzZGY=" # qwerasdf (base64)
+
+---
+# 5. ConfigMap(컨테이너 최초 실행 시 자동 실행됭 init.sql 스크립트)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-config
+data:
+  init.sql: |
+    CREATE USER IF NOT EXISTS 'std09'@'%' IDENTIFIED WITH mysql_native_password BY 'qwerasdf';
+    GRANT REPLICATION SLAVE ON *.* TO 'std09'@'%';
+    FLUSH PRIVILEGES;
+
+---
+# 6. Service 생성: svc와 pod 상호간 확인을 위한 생성(헤드리스 서비스, Statefulset에서 사용)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-headless
+spec:
+  clusterIP: None
+  selector:
+    app: mysql-lb
+  ports:
+  - port: 3306
+    name: mysql-port
+
+---
+# 7. 워커노드에 생성할 볼륨 드라이버 정의
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-sc
+  annotations:
+    # (선택사항) 기본 스토리지 클래스로 지정
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com  # 사용할 드라이버
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: gp3
+
+---
+# 8. MySQL을 Statefulset으로 배포
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-sfs
+spec:
+  serviceName: mysql-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mysql-lb
+  template:
+    metadata:
+      labels: 
+        app: mysql-lb
+    spec:
+      # nodeSelector:
+      #   eks.amazonaws.com/nodegroup: mysql-ng
+      # tolerations:
+      # - key: "dedicated"
+      #   operator: "Equal"
+      #   value: "database"
+      #   effect: "NoSchedule"
+      containers:
+      - name: mysql-container
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+          name: mysql-port
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: ROOT_PASSWORD
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+        - name: mysql-init-volume
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: mysql-init-volume
+        configMap:
+          name: mysql-init-config
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: gp3-sc
+      resources:
+        requests:
+          storage: 5Gi
+
+
+# EKS Cluster에 mysql 용 노드 그룹 추가 생성
+# eksctl create nodegroup \
+# --cluster=std09-ex1-cluster \
+# --region ca-central-1 \
+# --name mysql-ng \
+# --node-type t3.small \
+# --nodes 3 \
+# --node-volume-size 20 \
+# --ssh-access \
+# --ssh-public-key std09-keypair \
+# --managed
+
+# 노드 그룹 삭제
+# eksctl delete nodegroup \
+# --cluster std09-ex1-cluster \
+# --region ca-central-1 \
+# --name mysql-ng
+
+
+# 태그 추가?
+# kubectl taint nodes \
+# -l eks.amazonaws.com/nodegroup=mysql-ng \
+# dedicated=database:NoSchedule
