@@ -1,0 +1,65 @@
+# 1. StorageClass
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: s3-sc
+provisioner: s3.csi.aws.com   # 사용할 드라이버
+reclaimPolicy: Retain         # 파드가 죽더라도 연결된 저장소의 데이터 유지. <-> delete
+volumeBindingMode: Immediate  # PVC가 생성되는 즉시 PV를 만들고 연결하라
+---
+# 2. PV
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: s3-pv
+spec:
+  capacity:
+    storage: 12Gi
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: s3-sc
+  csi:
+    driver: s3.csi.aws.com
+    volumeHandle: s3.pv-handle
+    volumeAttributes:
+      bucketName: std09-s3-bucket
+
+
+---
+# 3. PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: s3-pvc
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: s3-sc
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: s3-pv
+
+---
+# 4. Pod 생성: ubuntu
+apiVersion: v1
+kind: Pod
+metadata:
+  name: s3-test-pod
+  namespace: default
+spec:
+  serviceAccountName: ubuntu-s3-sa    # iamserviceaccount 중 어플리케이션 용 이름
+  containers:
+  - name: test-container
+    image: ubuntu:latest
+    command: ["/bin/bash","-c","echo 'Hello from S3 CSI with Ubuntu!' > /data/test.txt && sleep 3600"]
+    volumeMounts:
+    - name: s3-volume
+      mountPath: /data
+  volumes:
+  - name: s3-volume
+    persistentVolumeClaim:
+      claimName: s3-pvc
+

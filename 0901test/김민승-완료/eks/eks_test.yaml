@@ -2,49 +2,48 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:   # eks 자체 설정
-    name: std09-ex1-cluster
+    name: std09-test-cluster
     region: ca-central-1
     tags:
-        # Name: "std09-ex1-cluster"
         Project: "Education"
         Owner: "bipa17"
 iam:
     withOIDC: true    # eks에 생성된 인스턴스들이 AWS 서비스를 사용할 수 있게 함.
 vpc:
-    id: "vpc-0e599640b22e89a0f"
+    id: "vpc-07ce919398c12d941"
     clusterEndpoints:
         publicAccess: true
         privateAccess: true
     subnets:
         public:
             ca-central-1a:
-                id: subnet-0e4e94ba6d2c7d7f8 # 기존의 VPC에 있는 서브넷을 그대로 사용
+                id: subnet-0fa9abab89f68ac90 # 기존의 VPC에 있는 서브넷을 그대로 사용
                 tags:
                   kubernetes.io/cluster/std09-ex1-cluster: "shared"
                   kubernetes.io/role/elb: "1"
             ca-central-1b:
-                id: subnet-06c09231e1e87ef4b
+                id: subnet-0073bb674f63f6960
                 tags:
                   kubernetes.io/cluster/std09-ex1-cluster: "shared"
                   kubernetes.io/role/elb: "1"
             ca-central-1d:
-                id: subnet-0719fd5c2c9232928
+                id: subnet-0e5517d7e0d7bcb6c
                 tags:
                   kubernetes.io/cluster/std09-ex1-cluster: "shared"
                   kubernetes.io/role/elb: "1"
         private:
             ca-central-1a:
-                id: subnet-0a1084b68378a36e1
+                id: subnet-0136fb259e0055b74
                 tags:
                   kubernetes.io/cluster/std09-ex1-cluster: "shared"
                   kubernetes.io/role/internal-elb: "1"
             ca-central-1b:
-                id: subnet-0984309a6289f0694
+                id: subnet-0a6643d0b9077abfb
                 tags:
                   kubernetes.io/cluster/std09-ex1-cluster: "shared"
                   kubernetes.io/role/internal-elb: "1"
             ca-central-1d:
-                id: subnet-0499df80696d3e0fb
+                id: subnet-0e96c2570f3b1b7a1
                 tags:
                   kubernetes.io/cluster/std09-ex1-cluster: "shared"
                   kubernetes.io/role/internal-elb: "1"
@@ -52,11 +51,11 @@ vpc:
 # 노드그룹 이름, 타입, 개수, 볼륨, AMI(eks 지원하는), ssh 설정, 어디(public/private) 배치할지
 # 보안그룹, 정책(IAM)
 managedNodeGroups:
-  - name: std09-ex-eks-ng
+  - name: std09-test-eks-ng
     instanceType: t3.small
-    desiredCapacity: 2
+    desiredCapacity: 1
     minSize: 1
-    maxSize: 3
+    maxSize: 2
     volumeSize: 20
     # 사용할 AMI 종류: eks가 지원되는 AmazonLinux2023, Ubuntu 등
     amiFamily: AmazonLinux2023
@@ -66,7 +65,7 @@ managedNodeGroups:
         allow: true
         publicKeyName: "std09-keypair" # EC2 키페어 이름
     securityGroups:
-        attachIDs: ["sg-0a6953e10a2ef4c6c", "sg-0fbff56eb32675f56"] # ssh, 외부 ALB를 통해 접근 to svc-sg
+        attachIDs: ["sg-00dfe3a3ab6e439b2", "sg-0fe6c4748ec255126"] # ssh, 외부 ALB를 통해 접근 to svc-sg
     # 테인트 설정: 데이터베이스 전용 Pod 외의 일반 Pod 배포를 차단(NoSchedule)
     # taints:
     #   - key: "dedicated" 키(key): 노드의 용도를 식별하기 위한 고유 이름 (예: dedicated=database)

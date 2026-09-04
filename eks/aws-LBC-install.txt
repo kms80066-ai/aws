@@ -43,7 +43,7 @@ kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/
 # 아래 "attach-policy-arn=" 오른쪽에 확인(저장)해 놓은 정책의 ARN으로 수정하세요.
 # 이때 --name는 고정값 입니다.
 eksctl create iamserviceaccount \
-  --cluster=std09-ex1-cluster \
+  --cluster=std09-test-cluster \
   --region=ca-central-1 \
   --namespace=kube-system \
   --name=aws-load-balancer-controller \
@@ -61,11 +61,11 @@ kubectl get sa aws-load-balancer-controller -n kube-system -o yaml
 # 5. AWS LoadBalancer 컨트롤러 설치
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
-  --set clusterName=std09-ex1-cluster \
+  --set clusterName=std09-test-cluster \
   --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller \
   --set region=ca-central-1 \
-  --set vpcId=vpc-0e599640b22e89a0f
+  --set vpcId=vpc-07ce919398c12d941
 
 # 설치 확인
 kubectl get deployment -n kube-system aws-load-balancer-controller

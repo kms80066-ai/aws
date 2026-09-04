@@ -1,0 +1,430 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-app-code
+data:
+  main.py: |
+    from fastapi import FastAPI, Request, Form, HTTPException
+    from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+    from fastapi.templating import Jinja2Templates
+    import pymysql
+    import os
+    import logging
+
+    logging.basicConfig(filename='/var/log/fastapi/app.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+
+    app = FastAPI()
+    templates = Jinja2Templates(directory="/app/templates")
+
+    DB_HOST = os.environ.get("DB_HOST")
+    DB_USER = os.environ.get("DB_USER", "adm")
+    DB_PASS = os.environ.get("DB_PASSWORD")
+    DB_NAME = os.environ.get("DB_NAME", "testdb")
+
+    def get_db():
+        return pymysql.connect(
+            host=DB_HOST, user=DB_USER, password=DB_PASS,
+            database=DB_NAME, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor
+        )
+
+    # 1. 메인 화면 [DB 데이터 가져오기] API
+    @app.get("/items")
+    @app.get("/loadlist/items")
+    def get_student_scores():
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                # SQL 마지막 컬럼 끝의 쉼표(,) 제거 완료
+                sql = """
+                    SELECT 
+                        s.email, 
+                        s.name, 
+                        c.class_name, 
+                        IFNULL(sc.kor, 0) AS kor, 
+                        IFNULL(sc.eng, 0) AS eng, 
+                        IFNULL(sc.mat, 0) AS mat
+                    FROM tstudent s
+                    JOIN tclass c ON s.class_idx = c.idx
+                    LEFT JOIN tscore sc ON s.idx = sc.student_idx
+                    ORDER BY s.idx ASC;
+                """
+                cur.execute(sql)
+                rows = cur.fetchall()
+            conn.close()
+            return JSONResponse(content=rows)
+        except Exception as e:
+            logging.error(f"DB Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # 2. 성적 등록 화면 (슬래시 유무 및 score/test 모두 허용)
+    @app.get("/test", response_class=HTMLResponse)
+    @app.get("/test/", response_class=HTMLResponse)
+    @app.get("/score", response_class=HTMLResponse)
+    @app.get("/score/", response_class=HTMLResponse)
+    @app.get("/score.html", response_class=HTMLResponse)
+    async def score_page(request: Request):
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                cur.execute("SELECT idx, name, email FROM tstudent ORDER BY idx ASC;")
+                students = cur.fetchall()
+                cur.execute("""
+                    SELECT s.name, s.email, c.class_name, sc.kor, sc.eng, sc.mat,
+                           ROUND((IFNULL(sc.kor,0) + IFNULL(sc.eng,0) + IFNULL(sc.mat,0)) / 3, 1) as avg
+                    FROM tstudent s
+                    JOIN tclass c ON s.class_idx = c.idx
+                    LEFT JOIN tscore sc ON s.idx = sc.student_idx
+                    ORDER BY s.idx ASC;
+                """)
+                scores = cur.fetchall()
+            conn.close()
+            return templates.TemplateResponse("score.html", {"request": request, "students": students, "scores": scores})
+        except Exception as e:
+            logging.error(f"Render Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # 3. 성적 등록 POST 액션
+    @app.post("/test")
+    @app.post("/test/")
+    @app.post("/score")
+    @app.post("/score/")
+    async def register_score(student_idx: int = Form(...), kor: int = Form(...), eng: int = Form(...), mat: int = Form(...)):
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                sql = """
+                    INSERT INTO tscore (student_idx, kor, eng, mat)
+                    VALUES (%s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE kor=%s, eng=%s, mat=%s;
+                """
+                cur.execute(sql, (student_idx, kor, eng, mat, kor, eng, mat))
+                conn.commit()
+            conn.close()
+            return RedirectResponse(url="/test", status_code=303)
+        except Exception as e:
+            logging.error(f"Register Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+  score.html: |
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <title>교육생 성적 등록 (EKS)</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>body { padding: 40px; background-color: #f8fafc; font-family: sans-serif; }</style>
+    </head>
+    <body>
+        <div class="container" style="max-width: 900px;">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="fw-bold m-0">교육생 성적 등록 (EKS + RDS Proxy)</h3>
+                <a href="/" class="btn btn-outline-secondary btn-sm">🏠 메인 포털로 돌아가기</a>
+            </div>
+            
+            <div class="card p-4 mb-4 shadow-sm border-0">
+                <h5 class="fw-bold mb-3">성적 입력 / 수정</h5>
+                <form action="/test" method="post" class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">학생명 선택</label>
+                        <select name="student_idx" class="form-select" required>
+                            <option value="">-- 학생을 선택하세요 --</option>
+                            {% for s in students %}
+                            <option value="{{ s.idx }}">{{ s.name }} ({{ s.email }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">국어</label>
+                        <input type="number" name="kor" class="form-control" min="0" max="100" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">영어</label>
+                        <input type="number" name="eng" class="form-control" min="0" max="100" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">수학</label>
+                        <input type="number" name="mat" class="form-control" min="0" max="100" required>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">등록</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card p-4 shadow-sm border-0">
+                <h5 class="fw-bold mb-3">모든 학생들의 등록된 성적 리스트</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>학생명</th><th>이메일</th><th>과정</th><th class="text-center">국어</th><th class="text-center">영어</th><th class="text-center">수학</th><th class="text-center">평균</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in scores %}
+                            <tr>
+                                <td class="fw-bold">{{ row.name }}</td>
+                                <td>{{ row.email }}</td>
+                                <td>{{ row.class_name }}</td>
+                                <td class="text-center">{{ row.kor if row.kor is not none else '-' }}</td>
+                                <td class="text-center">{{ row.eng if row.eng is not none else '-' }}</td>
+                                <td class="text-center">{{ row.mat if row.mat is not none else '-' }}</td>
+                                <td class="text-center fw-bold">{{ row.avg if row.avg is not none else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+
+---
+
+# ==========================================
+# 1. FastAPI Deployment & Service & HPA
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi-app
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+    spec:
+      containers:
+      - name: fastapi-container
+        image: 925047940866.dkr.ecr.ca-central-1.amazonaws.com/std09/fastapi:latest
+        imagePullPolicy: Always
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --no-cache-dir python-multipart pymysql
+            exec uvicorn main:app --host 0.0.0.0 --port 8000
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DB_HOST
+          value: "proxy-1788227290759-std09-db.proxy-cd6e4was8qr6.ca-central-1.rds.amazonaws.com"
+        - name: DB_USER
+          value: "adm"
+        # 쿠버네티스 환경변수에서 $ 문자는 반드시 $$로 이스케이프해야 합니다.
+        - name: DB_PASSWORD
+          value: "uU:gn-sXRb$$.GB8rC$$pWWx5K7TQ7"
+        - name: DB_NAME
+          value: "testdb"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        volumeMounts:
+        - name: fastapi-code
+          mountPath: /app/main.py
+          subPath: main.py
+        - name: fastapi-code
+          mountPath: /app/templates/score.html
+          subPath: score.html
+        - name: fastapi-logs
+          mountPath: /var/log/fastapi
+      volumes:
+      - name: fastapi-code
+        configMap:
+          name: fastapi-app-code
+      - name: fastapi-logs
+        hostPath:
+          path: /var/log/fastapi
+          type: DirectoryOrCreate
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fastapi-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fastapi-deployment
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-service
+spec:
+  type: ClusterIP
+  selector:
+    app: fastapi-app
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+
+---
+# ==========================================
+# 2. Nginx ConfigMap (Proxy 및 정적 라우팅)
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-eks-conf
+data:
+  default.conf: |
+    charset utf-8;
+
+    server {
+        listen 80;
+        server_name _;
+
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+
+        # 1. DB 데이터 조회 프록시 (/loadlist/items -> FastAPI)
+        location /loadlist/ {
+            proxy_pass http://fastapi-service:8000/;
+            proxy_http_version 1.1;
+        }
+
+        # 2. /test 및 /score 관련 모든 요청을 FastAPI 서비스로 직결
+        location ~ ^/(test|score) {
+            proxy_pass http://fastapi-service:8000;
+            proxy_http_version 1.1;
+            proxy_read_timeout 60s;
+        }
+
+        # 3. 프론트엔드 정적 파일 (/company, /student, /docker 등)
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ $uri.html /index.html;
+        }
+    }
+
+---
+# ==========================================
+# 3. Nginx Deployment & Service & HPA
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-web
+  template:
+    metadata:
+      labels:
+        app: nginx-web
+    spec:
+      containers:
+      - name: nginx-container
+        image: 925047940866.dkr.ecr.ca-central-1.amazonaws.com/std09/nginx:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        # 평가지 요구사항: 워커 노드 로컬 로그 기록
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: nginx-eks-conf
+      - name: nginx-logs
+        hostPath:
+          path: /var/log/nginx
+          type: DirectoryOrCreate
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-web
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+
+---
+# ==========================================
+# 4. Ingress (ALB 라우팅 및 SSL)
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: std09-alb-ingress
+  annotations:
+    alb.ingress.kubernetes.io/security-groups: sg-04200821de53fd084
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ca-central-1:925047940866:certificate/3352eb5f-ad9a-440d-b66e-0e3528d6a2f6
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80

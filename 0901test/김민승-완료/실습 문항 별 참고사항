@@ -1,0 +1,35 @@
+제출사항
+
+2: 
+- 서브넷 그룹 이름: std09-db-subgroup
+- MySQL DNS: std09-db.cd6e4was8qr6.ca-central-1.rds.amazonaws.com
+- RDS Proxy DNS: proxy-1788227290759-std09-db.proxy-cd6e4was8qr6.ca-central-1.rds.amazonaws.com
+
+4: 
+- 김민승_완료.zip (yaml 파일은 s3://std09-test.domain.class 버킷 내 보관)
+
+5: S3 정적 웹 호스팅 주소
+- S3 정적 주소 1 (회사/학생 포털): 버킷 std09-test-bucket 
+  URL: http://std09-test-bucket.s3-website.ca-central-1.amazonaws.com
+- S3 정적 주소 2 (Docker 소개): 버킷 std09-test.domain.class 
+  URL: http://std09-test.domain.class.s3-website.ca-central-1.amazonaws.com
+
+6: 통합 라우팅 (API Gateway)
+- 단일 진입점 API Gateway: std09-main-api
+- Route 53 A 레코드(test.kms26.cloud)와 단일 도메인 매핑 완료
+
+9: Lambda 함수
+- 함수 엔드포인트: /std09-lambda (RDS Proxy 연동을 통해 tstudent/tclass 동적 JSON 데이터 제공)
+
+10: EKS 인프라 구현 코드: eks_test.yaml
+11: 쿠버네티스 워크로드 배포 코드: get_ecr_test.yaml
+
+[통합 서비스 라우팅 구성]
+1. 메인 포털 (Docker Compose): test.kms26.cloud
+   - S3의 docker-compose.yaml을 인스턴스 User Data로 동기화하여 Auto Scaling Group(ASG) 무상태(Stateless) 고가용성 보장
+   - 메인 화면 내 "DB 데이터 가져오기" 클릭 시 RDS Proxy 실시간 연동 데이터 조회
+2. 회사 소개: test.kms26.cloud/company (S3 연동)
+3. 도커 소개: test.kms26.cloud/docker (S3 연동)
+4. 교육생 정보: test.kms26.cloud/student (S3 + AWS Lambda + RDS Proxy 연동)
+5. 성적 등록: test.kms26.cloud/score 및 /test (EKS + Ingress ALB + RDS Proxy 연동)
+   - 성적 등록 시 RDS Proxy를 통해 즉시 커밋되며, 메인 포털의 DB 조회 데이터와 실시간 동기화 완료

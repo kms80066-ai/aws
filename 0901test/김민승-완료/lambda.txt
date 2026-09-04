@@ -1,0 +1,71 @@
+import json
+import os
+import boto3
+import pymysql
+
+DB_HOST = os.environ.get('DB_HOST')
+DB_NAME = os.environ.get('DB_NAME', 'testdb')
+SECRET_NAME = os.environ.get('SECRET_NAME')
+REGION_NAME = os.environ.get('AWS_REGION', 'ca-central-1')
+
+def get_secret():
+    if not SECRET_NAME:
+        return {}
+    client = boto3.client(service_name='secretsmanager', region_name=REGION_NAME)
+    response = client.get_secret_value(SecretId=SECRET_NAME)
+    return json.loads(response['SecretString'])
+
+def lambda_handler(event, context):
+    try:
+        # 1. DB 계정 정보 조회
+        secret = get_secret()
+        db_user = secret.get('username', os.environ.get('DB_USER', 'adm'))
+        db_password = secret.get('password', os.environ.get('DB_PASSWORD', 'qwe123'))
+
+        # 2. RDS Proxy 접속
+        connection = pymysql.connect(
+            host=DB_HOST,
+            user=db_user,
+            password=db_password,
+            database=DB_NAME,
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=5
+        )
+
+        # 3. student.html이 요구하는 학생 기본 정보 (번호, 과정, 이름, 이메일, 거주지) 조회
+        with connection.cursor() as cursor:
+            sql = """
+                SELECT 
+                    s.idx AS no,
+                    c.class_name AS course,
+                    s.name,
+                    s.email,
+                    IFNULL(s.location, '서울') AS location
+                FROM tstudent s
+                JOIN tclass c ON s.class_idx = c.idx
+                ORDER BY s.idx ASC;
+            """
+            cursor.execute(sql)
+            students = cursor.fetchall()
+        connection.close()
+
+        # 4. JSON 응답 반환 (student.html 스크립트 파싱 규격)
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*"
+            },
+            "body": json.dumps(students, ensure_ascii=False)
+        }
+
+    except Exception as e:
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*"
+            },
+            "body": json.dumps({"error": str(e)})
+        }

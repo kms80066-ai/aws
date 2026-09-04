@@ -1,0 +1,60 @@
+
+services:
+  # 1. Nginx 웹서버 (리버스 프록시)
+  my-web:
+    image: 925047940866.dkr.ecr.ca-central-1.amazonaws.com/std09/nginx:latest
+    container_name: my-nginx
+    restart: unless-stopped
+    depends_on:
+      - my-backend
+    ports:
+      - "80:80"
+    networks:
+      - frontend-net
+      - backend-net
+    volumes:
+      - nginx-logs:/var/log/nginx
+
+  # 2. FastAPI 백엔드
+  my-backend:
+    image:  925047940866.dkr.ecr.ca-central-1.amazonaws.com/std09/fastapi:latest
+    container_name: my-app
+    restart: unless-stopped
+    depends_on:
+      - my-db
+    environment:
+      DB_HOST: "proxy-1788227290759-std09-db.proxy-cd6e4was8qr6.ca-central-1.rds.amazonaws.com"       # 내부 컨테이너 통신 시 서비스명 지정
+      DB_USER: "adm"
+      DB_PASSWORD: "uU:gn-sXRb$$.GB8rC$$pWWx5K7TQ7"
+      DB_NAME: "testdb"
+    ports:
+      - "8000:8000"
+    networks:
+      - backend-net
+
+  # 3. MySQL 데이터베이스
+  my-db:
+    image: 925047940866.dkr.ecr.ca-central-1.amazonaws.com/std09/mysql:latest
+    container_name: my-service-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "qwe123"
+      MYSQL_DATABASE: "testdb"
+      # MYSQL_USER: "std09"
+      # MYSQL_PASSWORD: "qwe123"
+    ports:
+      - "3306:3306"
+    networks:
+      - backend-net
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+
+volumes:
+  nginx-logs:
+  mysql-data:
